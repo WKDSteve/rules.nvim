@@ -103,7 +103,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # documentation.nvim checks this repo out to run the rules engine in its
+  # docmap.nvim checks this repo out to run the rules engine in its
   # standalone gate. Pointing it at `main` means a broken commit here turns that
   # CI red before anyone traces it back. `ci-verified` only moves once stylua,
   # luacheck and the tests on Linux, Windows and macOS have passed, so a consumer

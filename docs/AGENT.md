@@ -181,7 +181,7 @@ so. Accept records the violation in the verdict store.
 ## Why the engine has to run without Neovim
 
 The desktop app in `docmap-desktop` does not need Neovim and should keep not
-needing it, so it would run this engine inside `documentation.nvim`'s
+needing it, so it would run this engine inside `docmap.nvim`'s
 standalone build, under its `vim` shim. Measured against this repository, the
 `engine/`, `config/` and `init.lua` layers call about a dozen `vim.fn.*` and
 `vim.fs.*` helpers the shim does not have yet; the report and command layers
@@ -189,7 +189,7 @@ stay Neovim-only.
 
 **What is checked for the agent modules.** `engine/glob`, `engine/agent/plan`, `request` and `validate`, and the
 reading, ageing and orphan check of `engine/verdicts`, run under PUC Lua 5.4 with the shim and give the same output
-as in the editor, over a fixture project (`documentation.nvim`: `standalone/rules_agent_smoke.lua`, compared by its
+as in the editor, over a fixture project (`docmap.nvim`: `standalone/rules_agent_smoke.lua`, compared by its
 `standalone` gate). That run found three things the editor never shows: `unpack` is `table.unpack` on Lua 5.2 and later;
 a JSON null is a userdata in the editor and an empty table under the shim (a list check must reject `vim.NIL` itself);
 and `lib.nvim.fs.read_bounded` needs libuv's `fs_open`/`fs_fstat`/`fs_read`, which the shim has no counterpart for

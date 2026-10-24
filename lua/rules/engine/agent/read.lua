@@ -3,7 +3,7 @@
 ---@description
 --- The agent modules read repository files that somebody else controls. In the editor that is `lib.nvim.fs.read_bounded`
 --- (the type and size judged on the stat and again on the open descriptor, a FIFO cannot block it, a link is
---- refused). The desktop host runs the engine under the shim of `documentation.nvim`'s standalone build, whose `uv` has
+--- refused). The desktop host runs the engine under the shim of `docmap.nvim`'s standalone build, whose `uv` has
 --- no `fs_open`, `fs_fstat` or `fs_read`: there the file is checked with `lstat` (not a link, a regular file), opened
 --- with `io.open` and read at most `max_bytes + 1` bytes. The two paths give the same answers for a file that stays
 --- as it is. The second has **no** protection against a file swapped between the check and the open (a link is then
