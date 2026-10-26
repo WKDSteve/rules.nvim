@@ -1,60 +1,54 @@
+# CI of rules.nvim.
+#
+# Runs on a self-hosted runner (the author's Windows machine): the repository is private and has no paid plan, so
+# hosted runners do not start (billing/spending-limit errors, not a code problem). Runner: $REPOS_DIR/tasks-vault/
+# TOOLS/self-hosted-runner.md; start it with `scripts/runners.ps1 ensure rules.nvim` of the nvim config (or
+# `:MyPlugins ci runners`). Without a running runner a push stays "Queued" (no red mark, discarded after 24 h).
+# Only for PRIVATE repos with trusted authors; no `pull_request` trigger on purpose (a PR would run its own workflow
+# with the author's rights on this machine). Windows only: the Linux and macOS legs of the former matrix are gone.
+#
+# The tools (nvim, stylua, luacheck) are expected on the runner's PATH and are not pinned here (the hosted jobs pinned
+# stylua 2.5.2 and luacheck 1.2.0); every job prints the versions it used.
+
 name: CI
 
 on:
   push:
     branches: [main]
-  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# `shell: bash` resolves to the WSL launcher on this machine; Git Bash is named explicitly, in 8.3 form because the
+# shell string is split at spaces.
+defaults:
+  run:
+    shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}
 
 jobs:
   stylua:
     name: stylua (format check)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - uses: JohnnyMorganz/stylua-action@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          # Pinned, not "latest", the same way every other repo in the fleet
-          # pins it: a stylua release has changed formatting behaviour out
-          # from under a repo before, turning the gate red with no local diff
-          # to blame. Bump deliberately, with `stylua --write .` run and the
-          # diff reviewed.
-          version: v2.5.2
-          args: --check .
+      - run: stylua --version && stylua --check .
 
   luacheck:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      # PUC Lua, not "luajit-2.1": that value 404s on this action (LuaJIT
-      # stopped publishing the tarball it downloads). Which interpreter runs
-      # luacheck is independent of what it checks against -- `std = "luajit"`
-      # in .luacheckrc is what pins that.
-      - uses: leafo/gh-actions-lua@v13
-        with:
-          luaVersion: "5.4"
-      - uses: leafo/gh-actions-luarocks@v6
-      - run: luarocks install luacheck 1.2.0
-      - run: luacheck lua TESTS
+      - run: luacheck --version | head -n1 && luacheck lua TESTS
 
   tests:
-    name: testing.nvim specs (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: testing.nvim specs (windows)
+    runs-on: [self-hosted, windows]
     timeout-minutes: 15
-    strategy:
-      # One platform failing must not cancel the others: which of the three
-      # broke is the whole information content of this job.
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    defaults:
-      run:
-        # Windows runners default to PowerShell; one shell on all three keeps
-        # the run step itself from being what differs between platforms.
-        # scripts/test.sh is a bash script besides.
-        shell: bash
     steps:
       - uses: actions/checkout@v5
       # Both are resolved by scripts/test.sh and TESTS/minimal_init.lua from
@@ -66,16 +60,13 @@ jobs:
           repository: WKDSteve/lib.nvim
           path: .deps/lib.nvim
           ref: ci-verified
-      - uses: rhysd/action-setup-vim@v1
-        with:
-          neovim: true
-          version: stable
       # Checked out from the branch that only moves once the dependency's own CI is green.
       - uses: actions/checkout@v5
         with:
-          repository: "WKDSteve/testing.nvim"
+          repository: WKDSteve/testing.nvim
           path: .deps/testing.nvim
           ref: ci-verified
+      - run: nvim --version | head -n1
       - run: |
           exec > >(tee -a "$RUNNER_TEMP/test-output.log") 2>&1
           bash scripts/test.sh --json "$RUNNER_TEMP/testing-ir.json"
@@ -87,18 +78,18 @@ jobs:
       # No Node and no lib.nvim: the generator is a Lua script that nvim runs.
       - name: Contract declarations are current
         run: nvim --headless -u NONE -i NONE -n -l scripts/contract-dts.lua --check
-      # The IR is what a reporter or a person reads to find out WHICH case failed on WHICH platform.
+      # The IR is what a reporter or a person reads to find out WHICH case failed.
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: testing-ir-${{ matrix.os }}
+          name: testing-ir-windows
           path: ${{ runner.temp }}/testing-ir.json
           if-no-files-found: ignore
           retention-days: 14
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: test-output-tests-${{ matrix.os }}
+          name: test-output-tests-windows
           path: ${{ runner.temp }}/test-output.log
           if-no-files-found: ignore
           retention-days: 14
@@ -106,14 +97,14 @@ jobs:
   # docmap.nvim checks this repo out to run the rules engine in its
   # standalone gate. Pointing it at `main` means a broken commit here turns that
   # CI red before anyone traces it back. `ci-verified` only moves once stylua,
-  # luacheck and the tests on Linux, Windows and macOS have passed, so a consumer
-  # pinning `ref: ci-verified` always tests against a known-good commit. Same job
-  # as lib.nvim's (never moves backwards along main, retries a lost lease).
+  # luacheck and the tests have passed, so a consumer pinning `ref: ci-verified`
+  # always tests against a known-good commit. Same job as lib.nvim's (never
+  # moves backwards along main, retries a lost lease).
   publish-ci-verified:
     name: publish ci-verified branch
     needs: [stylua, luacheck, tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
     timeout-minutes: 15
     permissions:
       contents: write
@@ -131,9 +122,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
-        # `bash` (not the default `bash -e`) adds pipefail: a failing `git ls-remote | cut` must stop the job
-        # instead of reading as "branch missing".
-        shell: bash
         run: |
           # Look the branch up on the remote instead of inferring "missing" from an API
           # error: a failed lookup must stop the job, not fall through to a push.
