@@ -113,7 +113,7 @@ function M.check()
   if pcall(require, "lib.nvim.bindings.usercmd.composer") then
     ok("lib.nvim.bindings.usercmd.composer -- the :Rules command")
   else
-    error_("lib.nvim missing -- :Rules will not be registered", { 'Install "StefanBartl/lib.nvim"' })
+    error_("lib.nvim missing -- :Rules will not be registered", { 'Install "WKDSteve/lib.nvim"' })
     return
   end
 

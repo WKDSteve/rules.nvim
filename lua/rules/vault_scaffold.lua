@@ -45,7 +45,7 @@ end
 local README = [[
 # Rules vault
 
-The rulesets of one person, in a repository of their own. [rules.nvim](https://github.com/StefanBartl/rules.nvim)
+The rulesets of one person, in a repository of their own. [rules.nvim](https://github.com/WKDSteve/rules.nvim)
 reads them; nothing else is in here.
 
 ```

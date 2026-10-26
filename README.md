@@ -17,9 +17,9 @@
 [![Neovim](https://img.shields.io/badge/Neovim-0.10%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2FLuaJIT-2C2D72?logo=lua&logoColor=white)](https://www.lua.org)
 ![Status](https://img.shields.io/badge/status-alpha-red)
-[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://stefanbartl.github.io/wkd/p/rules/)
+[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://wkdsteve.github.io/wkd/p/rules/)
 
-> Part of the [wkd](https://stefanbartl.github.io/wkd/) family — see this plugin's [page](https://stefanbartl.github.io/wkd/p/rules/) on the site.
+> Part of the [wkd](https://wkdsteve.github.io/wkd/) family — see this plugin's [page](https://wkdsteve.github.io/wkd/p/rules/) on the site.
 
 A rule/checklist engine for Neovim. `rules.nvim` reads a set of rules you
 point it at, runs whichever of them can be checked mechanically against a
@@ -123,9 +123,9 @@ is published by installing it, and nothing here is imposed on you by
 installing it either.
 
 It does not replace the ready-made analyses of
-[insights.nvim](https://github.com/StefanBartl/insights.nvim) (git conflicts,
+[insights.nvim](https://github.com/WKDSteve/insights.nvim) (git conflicts,
 unused imports, code metrics) or
-[recommender.nvim](https://github.com/StefanBartl/recommender.nvim) (repeated
+[recommender.nvim](https://github.com/WKDSteve/recommender.nvim) (repeated
 dotted chains worth aliasing): a `grep` or `lua_predicate` check can cover
 similar ground, but with your own IDs, severities and thresholds, and as a
 separate pass over the tree with no shared cache.
@@ -135,15 +135,15 @@ separate pass over the tree with no shared cache.
 | | |
 | --- | --- |
 | Neovim | **0.10+** |
-| [lib.nvim](https://github.com/StefanBartl/lib.nvim) | required — the `:Rules` command itself (`usercmd.composer`) |
+| [lib.nvim](https://github.com/WKDSteve/lib.nvim) | required — the `:Rules` command itself (`usercmd.composer`) |
 
 ## Installation
 
 ```lua
 -- lazy.nvim
 {
-  "StefanBartl/rules.nvim",
-  dependencies = { "StefanBartl/lib.nvim" },
+  "WKDSteve/rules.nvim",
+  dependencies = { "WKDSteve/lib.nvim" },
   cmd = { "Rules", "RulesVault" },
   opts = {
     rulesets = { "~/path/to/your/checklists" },
@@ -226,7 +226,7 @@ forms load side by side; see
 
 Clone the repository and either symlink it or add it to your runtime path.
 Run the test suite with `scripts/test.sh` (needs a
-[testing.nvim](https://github.com/StefanBartl/testing.nvim) and a `lib.nvim`
+[testing.nvim](https://github.com/WKDSteve/testing.nvim) and a `lib.nvim`
 checkout — see that script's own header for how it finds them). Pass
 `--file <text>` to run only the spec files whose name contains `<text>`.
 
@@ -235,9 +235,9 @@ Pull requests very welcome.
 ## Feedback
 
 Your feedback is very welcome. Use the
-[issue tracker](https://github.com/StefanBartl/rules.nvim/issues) to report
+[issue tracker](https://github.com/WKDSteve/rules.nvim/issues) to report
 bugs, suggest features or ask usage questions; anything more open-ended fits
-a [discussion](https://github.com/StefanBartl/rules.nvim/discussions).
+a [discussion](https://github.com/WKDSteve/rules.nvim/discussions).
 
 If you find this plugin useful, a star on GitHub supports its development.
 
