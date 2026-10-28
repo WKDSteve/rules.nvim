@@ -14,6 +14,8 @@
 ---   keys            object            `setup()` only: `form` = action -> key, a list of keys, or `false` (the keys of the
 ---                                     `:Rules new` form: `toggle`, `accept`, `submit`, `close`, `cancel`, `help`); the keys
 ---                                     of your editor are yours, not a repository's
+---   review_context_menu  boolean      `setup()` only: `<RightMouse>` on `:Rules review` opens a menu of the a/w/x/<CR>
+---                                     keys; same reasoning as `keys` -- your editor's own UI is yours, not a repository's
 ---
 --- `check` never raises and never guesses: it returns the part that is valid, every problem with the dotted key it
 --- belongs to, and every key it does not know. What to do with a problem is the caller's: `setup()` drops the key
@@ -35,7 +37,7 @@ local M = {}
 ---(`rules.api`, `scripts/rules.lua`): its keys are checked like the others, an unknown one is not looked for.
 ---@type table<Rules.Config.Scope, string[]>
 M.KEYS = {
-  setup = { "rulesets", "gates", "lua_predicates", "vault", "agent", "trust", "keys" },
+  setup = { "rulesets", "gates", "lua_predicates", "vault", "agent", "trust", "keys", "review_context_menu" },
   project = { "rulesets", "gates", "agent", "vault" },
   vault = { "rulesets", "gates", "agent" },
   call = { "rulesets", "gates", "agent", "vault", "trust" },
@@ -59,12 +61,14 @@ local ELSEWHERE = {
     lua_predicates = "is a setup() option only (a file in a repository must not decide what code may run)",
     trust = "is a setup() option only (a file in a repository must not grant itself trust)",
     keys = "is a setup() option only (the keys of your editor are yours, not a repository's)",
+    review_context_menu = "is a setup() option only (your editor's own UI is yours, not a repository's)",
   },
   vault = {
     lua_predicates = "is a setup() option only (a file must not decide what code may run)",
     trust = "is a setup() option only (a file must not grant trust)",
     keys = "is a setup() option only (the keys of your editor are yours, not a vault's)",
     vault = "belongs in setup() or a project file (a vault does not name another vault)",
+    review_context_menu = "is a setup() option only (your editor's own UI is yours, not a vault's)",
   },
 }
 
@@ -338,6 +342,17 @@ local function lua_predicates(value, problems)
   return value
 end
 
+---@param value any
+---@param problems Rules.Config.Problem[]
+---@return boolean|nil
+local function review_context_menu(value, problems)
+  if type(value) ~= "boolean" then
+    problems[#problems + 1] = { key = "review_context_menu", message = ("must be a boolean, got %s"):format(describe(value)) }
+    return nil
+  end
+  return value
+end
+
 ---The key(s) of one action: a key (a string), a list of keys, or `false` to switch the action's key off.
 ---@param value any
 ---@param key string  dotted path of the action, e.g. `keys.form.submit`
@@ -442,6 +457,9 @@ local function check_table(value, scope)
   end
   if allowed.keys and value.keys ~= nil then
     clean.keys = keys(value.keys, problems, result.unknown)
+  end
+  if allowed.review_context_menu and value.review_context_menu ~= nil then
+    clean.review_context_menu = review_context_menu(value.review_context_menu, problems)
   end
   return result
 end

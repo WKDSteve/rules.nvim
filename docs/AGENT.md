@@ -178,6 +178,10 @@ them, and `unclear` cannot be accepted. A waiver (`w`) of a rule without a check
 runner applies a waiver to a failing check only: the rule stays `manual` in `:Rules check`, and the command says
 so. Accept records the violation in the verdict store.
 
+`<RightMouse>` opens a menu of the same four, on the proposal under the mouse pointer rather than the one
+under the cursor — the menu items call the exact same functions the keys do. `setup({ review_context_menu =
+false })` disables the binding only (the keys above are unaffected).
+
 ## Why the engine has to run without Neovim
 
 The desktop app in `docmap-desktop` does not need Neovim and should keep not

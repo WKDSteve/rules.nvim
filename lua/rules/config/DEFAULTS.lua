@@ -42,6 +42,8 @@
 ---   `setup({ vault })` or `$RULES_VAULT` are trusted without an entry here
 ---@field agent Rules.AgentOpts  how an agent run is planned (the same block as in `.rules.json`)
 ---@field keys Rules.KeysConfig  the keys of the `:Rules new` form; `setup()` only (a file must not bind your keys)
+---@field review_context_menu boolean  `<RightMouse>` on `:Rules review` opens a menu of the same a/w/x/<CR> keys;
+---   `setup()` only, same reasoning as `keys` -- a file must not control your editor's own UI chrome
 
 ---@type Rules.Opts
 return {
@@ -50,6 +52,7 @@ return {
   lua_predicates = true,
   vault = nil,
   trust = {},
+  review_context_menu = true,
   agent = {
     backends = {},
     models = {},

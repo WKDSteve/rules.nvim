@@ -379,4 +379,115 @@ describe(":Rules review", function()
     assert.is_true(#lines > 3)
     assert.are.equal("DEP-01", owner[4].rule.id)
   end)
+
+  describe("context menu", function()
+    local saved_bind_buffer = require("lib.nvim.contextmenu").bind_buffer
+    local captured_get_items
+
+    ---@param items table[]
+    ---@param name string
+    ---@return table|nil
+    local function find_item(items, name)
+      for _, item in ipairs(items) do
+        if item.name == name then
+          return item
+        end
+      end
+      return nil
+    end
+
+    before_each(function()
+      captured_get_items = nil
+      require("lib.nvim.contextmenu").bind_buffer = function(_, get_items, _opts)
+        captured_get_items = get_items
+      end
+    end)
+
+    after_each(function()
+      require("lib.nvim.contextmenu").bind_buffer = saved_bind_buffer
+    end)
+
+    it("binds a get_items provider by default", function()
+      ask_family("DEP")
+      open()
+
+      assert.is_function(captured_get_items)
+    end)
+
+    it("does not bind at all when review_context_menu = false", function()
+      require("rules").setup({
+        rulesets = { ruleset },
+        agent = { scopes = { DEP = { include = { "lua/**/*.lua" } }, ERR = { include = { "lua/**/*.lua" } } } },
+        review_context_menu = false,
+      })
+      ask_family("DEP")
+      open()
+
+      assert.is_nil(captured_get_items)
+    end)
+
+    it("a click anywhere in a violation's block moves the cursor there and offers accept/waive/discard/open finding", function()
+      ask_family("DEP")
+      local buf = open()
+
+      -- The finding line, not the head -- `owner` covers every line of the block, not just its first.
+      local line = assert(line_of(buf, "lua/a.lua:2"))
+      vim.fn.getmousepos = function()
+        return { winid = vim.api.nvim_get_current_win(), line = line, column = 1 }
+      end
+
+      local items = captured_get_items()
+
+      assert.are.equal(line, vim.api.nvim_win_get_cursor(0)[1])
+      assert.are.equal("DEP-01", items[1].name)
+      for _, name in ipairs({ "Accept", "Waive", "Discard", "Open finding" }) do
+        assert.is_not_nil(find_item(items, name), name .. " missing")
+      end
+      vim.fn.getmousepos = nil
+    end)
+
+    it("a compliant proposal has no finding to open: that item is left out", function()
+      ask_family("DEP")
+      local buf = open()
+      local line = assert(line_of(buf, "PROPOSED compliant DEP-02"))
+      vim.fn.getmousepos = function()
+        return { winid = vim.api.nvim_get_current_win(), line = line, column = 1 }
+      end
+
+      local items = captured_get_items()
+
+      assert.are.equal("DEP-02", items[1].name)
+      assert.is_nil(find_item(items, "Open finding"))
+      vim.fn.getmousepos = nil
+    end)
+
+    it("a click off any proposal (the header) offers nothing", function()
+      ask_family("DEP")
+      local buf = open()
+      local line = assert(line_of(buf, "there is no accept-all"))
+      vim.fn.getmousepos = function()
+        return { winid = vim.api.nvim_get_current_win(), line = line, column = 1 }
+      end
+
+      assert.are.same({}, captured_get_items())
+      vim.fn.getmousepos = nil
+    end)
+
+    it("the menu's Accept item runs the exact same accept() as the key", function()
+      ask_family("DEP")
+      local buf = open()
+      local line = assert(line_of(buf, "PROPOSED violation DEP-01"))
+      vim.fn.getmousepos = function()
+        return { winid = vim.api.nvim_get_current_win(), line = line, column = 1 }
+      end
+
+      local items = captured_get_items()
+      find_item(items, "Accept").cmd()
+      vim.fn.getmousepos = nil
+
+      local loaded = verdicts.load(root)
+      assert.is_not_nil(loaded["DEP-01"])
+      assert.is_nil(line_of(buf, "PROPOSED violation DEP-01"))
+    end)
+  end)
 end)

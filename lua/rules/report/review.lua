@@ -15,9 +15,16 @@
 ---
 --- `unclear` is not acceptable: it is the absence of an answer, and the keys say so. The person who accepts is
 --- `vim.g.rules_by`, else the user name of the machine, else asked.
+---
+--- `<RightMouse>` opens a menu of the same four (`lib.nvim.contextmenu.bind_buffer`, not `ui.contextmenu`: rules.nvim
+--- already treats `lib.nvim` as a hard dependency and this must not add `ui.nvim` as a second one just for a menu),
+--- on the proposal under the mouse pointer -- the handlers below are the exact functions `a`/`w`/`x`/`<CR>` call, so a
+--- menu item can never drift from its key. No "act on every marked proposal" item, on purpose, same as the keys: there
+--- is nothing to mark. `review_context_menu = false` (`setup()` only) disables the binding; every key still works.
 
 local agent = require("rules.agent")
 local notify = require("rules.util.notify")
+local contextmenu = require("lib.nvim.contextmenu")
 
 local M = {}
 
@@ -203,36 +210,74 @@ function M.open(root)
   local function map(key, fn, desc)
     vim.keymap.set("n", key, fn, { buffer = buf, nowait = true, silent = true, desc = "rules review: " .. desc })
   end
-  map("a", function()
+
+  -- Named, not inline: `<RightMouse>`'s menu items below call these same functions, so a menu entry can never drift
+  -- from what its key does.
+  local function do_accept()
     local proposal = current()
     if proposal and M.accept(root, proposal) then
       refresh()
     end
-  end, "accept the proposal under the cursor")
-  map("w", function()
+  end
+  local function do_waive()
     local proposal = current()
     if proposal then
       M.waive(root, proposal, nil, refresh)
     end
-  end, "waive the violation under the cursor")
-  map("x", function()
+  end
+  local function do_discard()
     local proposal = current()
     if proposal then
       M.discard(root, proposal)
       refresh()
     end
-  end, "discard the proposal under the cursor")
-  map("<CR>", function()
+  end
+  local function do_open_finding()
     local proposal = current()
     local finding = proposal and proposal.result.findings[1]
     if finding then
       vim.cmd.edit(vim.fn.fnameescape(root .. "/" .. finding.file))
       pcall(vim.api.nvim_win_set_cursor, 0, { finding.line, 0 })
     end
-  end, "open the first finding")
+  end
+
+  map("a", do_accept, "accept the proposal under the cursor")
+  map("w", do_waive, "waive the violation under the cursor")
+  map("x", do_discard, "discard the proposal under the cursor")
+  map("<CR>", do_open_finding, "open the first finding")
   map("q", function()
     vim.cmd.close()
   end, "close")
+
+  if require("rules.config").get().review_context_menu then
+    contextmenu.bind_buffer(buf, function()
+      -- Moves the cursor to the proposal under the mouse pointer first (not wherever it was left), so `do_accept`/
+      -- `do_waive`/`do_discard`/`do_open_finding` -- which all act on "the proposal under the cursor" via `current()`
+      -- -- end up acting on the one the user actually pointed at.
+      local ok, pos = pcall(vim.fn.getmousepos)
+      if ok and type(pos) == "table" and pos.winid == vim.api.nvim_get_current_win() then
+        pcall(vim.api.nvim_win_set_cursor, pos.winid, { pos.line, 0 })
+      end
+
+      -- A silent peek, unlike `current()`: building the menu must not itself notify "put the cursor on a proposal"
+      -- for every right-click that lands off a proposal block (the header, a blank line).
+      local proposal = owner[vim.api.nvim_win_get_cursor(0)[1]]
+      if not proposal then
+        return {}
+      end
+
+      local items = {}
+      contextmenu.group(
+        items,
+        contextmenu.heading(proposal.rule.id),
+        contextmenu.entry(true, "Accept", do_accept, "a"),
+        contextmenu.entry(true, "Waive", do_waive, "w"),
+        contextmenu.entry(true, "Discard", do_discard, "x"),
+        contextmenu.entry(#proposal.result.findings > 0, "Open finding", do_open_finding, "<CR>")
+      )
+      return items
+    end, { desc = "rules review: right-click context menu" })
+  end
 
   refresh()
   vim.cmd("tabnew")

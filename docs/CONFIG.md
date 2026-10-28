@@ -29,6 +29,8 @@ How two places combine:
   [A word on trust](#a-word-on-trust).
 - `keys` comes from `setup()` only: the keys of your editor are yours, not a repository's or a vault's. In a file it is an
   unknown key with that hint. See [The keys of the form](#the-keys-of-the-form).
+- `review_context_menu` comes from `setup()` only, same reasoning as `keys`: whether `<RightMouse>` on `:Rules review`
+  opens a menu is your editor's own UI, not a repository's or a vault's to decide.
 
 ## `.rules.json`
 
@@ -64,7 +66,8 @@ The same schema in a project and in a vault. Paths are relative to the file that
 
 The `agent` block is read, checked and merged here; `rules.engine.agent.plan` consumes `scopes`, `batch_size`,
 `max_context_bytes` and `deny` (see [AGENT.md](AGENT.md)); `backends` and `models` are for the commands that send a request.
-`setup()` takes the same keys (`rulesets`, `gates`, `agent`, `vault`) plus `lua_predicates`, `trust` and `keys`.
+`setup()` takes the same keys (`rulesets`, `gates`, `agent`, `vault`) plus `lua_predicates`, `trust`, `keys` and
+`review_context_menu`.
 
 Only the file at the root being checked is read (`:Rules check` uses its `path` argument, else the working directory).
 There is no search upwards.
@@ -92,8 +95,8 @@ survives a `batch_size` that is not a number.
 
 A key the schema does not know is ignored with a warning and the nearest known key as a hint (the ERR-50 pattern of
 `setup()`): `unknown key(s) ignored: ruleset (did you mean rulesets?)`. A key that is known elsewhere but not in this
-place says why (`lua_predicates`, `trust` and `keys` are `setup()` options only; `vault` does not belong in a vault's
-own file). Each warning is shown once per session.
+place says why (`lua_predicates`, `trust`, `keys` and `review_context_menu` are `setup()` options only; `vault` does
+not belong in a vault's own file). Each warning is shown once per session.
 
 ### The keys of the form
 
