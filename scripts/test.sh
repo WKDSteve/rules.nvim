@@ -130,7 +130,18 @@ fi
 
 if [[ "${1:-}" == "ci" ]]; then
   shift
-  exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" ci --state-dir "$real_state" "$@"
+  # `verify`, `list` and `hook` are subcommands of `testing ci`: --state-dir goes after `verify` (it reads the proof
+  # there); `list` and `hook` take none
+  ci_args=()
+  case "${1:-}" in
+    verify)
+      shift
+      ci_args=(verify --state-dir "$real_state")
+      ;;
+    list | hook) ;;
+    *) ci_args=(--state-dir "$real_state") ;;
+  esac
+  exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" ci ${ci_args[@]+"${ci_args[@]}"} "$@"
 fi
 
 exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" run . "$@"
