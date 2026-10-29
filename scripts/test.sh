@@ -112,4 +112,9 @@ if [[ "${1:-}" == "conformance" ]]; then
   exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" conformance . "$@"
 fi
 
+if [[ "${1:-}" == "ci" ]]; then
+  shift
+  exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" ci "$@"
+fi
+
 exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" run . "$@"

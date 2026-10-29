@@ -49,4 +49,18 @@ return {
       },
     },
   },
+  -- The pipeline `scripts/ci.sh` (a shim for `testing ci`) and the workflow run; `--fast` is the pre-push profile.
+  ci = {
+    default = "full",
+    profiles = {
+      fast = { "stylua", "luacheck" },
+      full = { "fast", "suite", "conformance", "contracts" },
+    },
+    steps = {
+      luacheck = { preset = "luacheck", args = { "lua", "TESTS" } },
+      contracts = {
+        run = { "nvim", "--headless", "-u", "NONE", "-i", "NONE", "-n", "-l", "scripts/contract-dts.lua", "--check" },
+      },
+    },
+  },
 }
