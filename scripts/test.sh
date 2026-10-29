@@ -28,9 +28,15 @@ ROOT="$(pwd)"
 # The runner first, then what the project needs (this list is the `deps` of .testing.lua).
 DEPS=('testing.nvim' 'lib.nvim')
 
+# `ci`: a missing nvim, runner or dependency is infrastructure (exit 3, as `testing ci` reports it), not a failed step
+FAIL_CODE=1
+if [[ "${1:-}" == "ci" ]]; then
+  FAIL_CODE=3
+fi
+
 fail() {
   printf '\033[31m%s\033[0m\n' "$1" >&2
-  exit 1
+  exit "$FAIL_CODE"
 }
 
 command -v nvim >/dev/null 2>&1 || fail "error: nvim is not on PATH."
@@ -104,6 +110,16 @@ for name in "${DEPS[@]}"; do
 done
 [[ -f "$DRIVER" ]] || fail "error: the runner entry is missing: $DRIVER"
 
+# `ci`: the pipeline's document (ci.json) and the suite's stamp must land in the developer's real state directory,
+# where `testing ci verify`, the pre-push hook and `:Testing ci status` read them. It is asked for BEFORE the throwaway
+# app name below and handed to `testing ci --state-dir` (an argument, not the environment: the specs must not
+# inherit it).
+real_state=""
+if [[ "${1:-}" == "ci" ]]; then
+  real_state="$(nvim -n -i NONE --headless -u NONE --cmd 'lua io.stdout:write(vim.fn.stdpath("state"))' --cmd 'qa!' 2>/dev/null)"
+  [[ -n "$real_state" ]] || fail 'error: cannot ask nvim for stdpath("state"); the ci document would be lost.'
+fi
+
 # Throwaway app name: the run gets its own stdpath("config"/"data"/"state"), never the developer's.
 export NVIM_APPNAME="${NVIM_APPNAME:-rules-tests}"
 
@@ -114,7 +130,7 @@ fi
 
 if [[ "${1:-}" == "ci" ]]; then
   shift
-  exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" ci "$@"
+  exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" ci --state-dir "$real_state" "$@"
 fi
 
 exec nvim -n -i NONE --headless -u NONE -l "$DRIVER" run . "$@"
