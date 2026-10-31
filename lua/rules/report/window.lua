@@ -43,9 +43,23 @@ function M.open(lines)
     vim.bo[buf].modifiable = true
   else
     buf = vim.api.nvim_create_buf(false, true)
+    -- The report is a throwaway scratch buffer: closing its tab (or showing
+    -- something else in its window) wipes it instead of leaving it hidden.
+    vim.bo[buf].bufhidden = "wipe"
     vim.cmd.tabnew()
     win = vim.api.nvim_get_current_win()
+    -- `:tabnew` opens an empty listed [No Name] buffer that the report
+    -- replaces; wipe it so every report does not leave one behind in `:ls`.
+    local placeholder = vim.api.nvim_win_get_buf(win)
     vim.api.nvim_win_set_buf(win, buf)
+    if
+      placeholder ~= buf
+      and vim.api.nvim_buf_is_valid(placeholder)
+      and vim.api.nvim_buf_get_name(placeholder) == ""
+      and not vim.bo[placeholder].modified
+    then
+      vim.api.nvim_buf_delete(placeholder, { force = true })
+    end
     vim.w[win][TAG] = true
   end
 

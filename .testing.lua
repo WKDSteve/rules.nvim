@@ -19,12 +19,11 @@ return {
     scheduled_error = "error",
     prompt = "error",
     deprecation = "error",
-    -- Warn only: TESTS/window_spec.lua closes the tabs that report.window.open creates, but not
-    -- the report buffers behind them, so the state guard names 14 leaked buffers. A spec that
-    -- leaks (not the plugin); the specs stay unchanged for now.
+    -- The suite leaves no state behind (buffers, windows, autocmds, keymaps, user commands, options):
+    -- report buffers wipe themselves when their tab closes, and specs delete what they create.
     -- (TESTS/usrcmds_write_spec.lua runs the real button dialog of lib.nvim, whose theme defines the Kit* highlight
     -- groups: the library's, not a leak of the plugin.)
-    state = { mode = "warn", ignore_highlights = { "Kit" } },
+    state = { mode = "error", ignore_highlights = { "Kit" } },
     -- Spawn net on: every process a spec starts must be listed in guard_allow.spawn below.
     process_net = "error",
   },

@@ -47,6 +47,16 @@ describe("rules.report.window.open", function()
     assert.are.equal(tabs_before_second + 1, vim.fn.tabpagenr("$"))
   end)
 
+  it("leaves no buffer behind once its tab is closed", function()
+    local bufs_before = vim.api.nvim_list_bufs()
+
+    window.open({ "first run" })
+    window.open({ "second run" })
+    close_extra_tabs()
+
+    assert.are.same(bufs_before, vim.api.nvim_list_bufs())
+  end)
+
   it("does not hijack the tagged window if the user navigated it away from the report", function()
     window.open({ "first run" })
     local win = vim.api.nvim_get_current_win()
@@ -62,5 +72,6 @@ describe("rules.report.window.open", function()
     assert.are.equal(tabs_before_second + 1, vim.fn.tabpagenr("$"))
     -- the repurposed window/buffer must be untouched
     assert.are.same({ "" }, vim.api.nvim_buf_get_lines(other_buf, 0, -1, false))
+    vim.api.nvim_buf_delete(other_buf, { force = true })
   end)
 end)
