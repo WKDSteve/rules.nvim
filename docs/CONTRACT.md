@@ -47,8 +47,8 @@ How the types read:
 - Keys are sorted, LF only, one final newline: the same schema always gives the same bytes. The header names the schema it
   came from.
 - The file is the one the schema generates now, or CI is red: `TESTS/contract_dts_spec.lua` compares it (in process and
-  through the command line, which also proves the exit codes) and the `tests` job of `.github/workflows/ci.yml` has the
-  step `Contract declarations are current`. A client checks its own use against the golden files: every document in
+  through the command line, which also proves the exit codes) and the `contracts` step of the `ci` section in
+  `.testing.lua` runs the same check (`scripts/ci.sh`, so also the CI workflow). A client checks its own use against the golden files: every document in
   `schemas/rules-export/1/golden/` is a valid value of its type (checked once with `tsc`, not in this repository's CI).
 
 ## Rules the documents keep
