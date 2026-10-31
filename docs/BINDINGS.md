@@ -374,7 +374,10 @@ at `setup()`, never ignored silently; `keys` is a `setup()` option only (in a
 report window (any tab) instead of opening a fresh tab on every call — a
 repeated run replaces that window's content in place. Navigating the
 window away from the report (e.g. `:e` another file in it) makes the next
-run open a new tab again rather than hijacking it.
+run open a new tab again rather than hijacking it. The report is a throwaway
+buffer (`bufhidden=wipe`): it is wiped as soon as its tab is closed or its
+window shows something else, so `:b#`/`<C-^>` cannot bring it back — run the
+command again instead.
 
 ## Headless/CI use
 

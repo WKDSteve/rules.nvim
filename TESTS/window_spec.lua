@@ -57,6 +57,17 @@ describe("rules.report.window.open", function()
     assert.are.same(bufs_before, vim.api.nvim_list_bufs())
   end)
 
+  it("wipes the report buffer once its window shows something else", function()
+    window.open({ "first run" })
+    local report_buf = vim.api.nvim_get_current_buf()
+
+    vim.cmd("enew")
+    local other_buf = vim.api.nvim_get_current_buf()
+
+    assert.is_false(vim.api.nvim_buf_is_valid(report_buf))
+    vim.api.nvim_buf_delete(other_buf, { force = true })
+  end)
+
   it("does not hijack the tagged window if the user navigated it away from the report", function()
     window.open({ "first run" })
     local win = vim.api.nvim_get_current_win()

@@ -52,13 +52,15 @@ function M.open(lines)
     -- replaces; wipe it so every report does not leave one behind in `:ls`.
     local placeholder = vim.api.nvim_win_get_buf(win)
     vim.api.nvim_win_set_buf(win, buf)
+    -- No `force`: the placeholder is unmodified here, so a failing delete
+    -- means the assumptions changed and must surface instead of silently
+    -- discarding content.
     if
-      placeholder ~= buf
-      and vim.api.nvim_buf_is_valid(placeholder)
+      vim.api.nvim_buf_is_valid(placeholder)
       and vim.api.nvim_buf_get_name(placeholder) == ""
       and not vim.bo[placeholder].modified
     then
-      vim.api.nvim_buf_delete(placeholder, { force = true })
+      vim.api.nvim_buf_delete(placeholder, {})
     end
     vim.w[win][TAG] = true
   end
