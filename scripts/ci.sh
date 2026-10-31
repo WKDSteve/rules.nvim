@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# The CI entry point of this repo: `:MyPlugins ci rules.nvim` (Neovim) runs exactly this, and so do the workflows
-# (.github/workflows/ci.yml on the self-hosted runner for pushes, pr.yml on GitHub-hosted runners for pull requests).
+# The CI entry point of this repo: `:MyPlugins ci rules.nvim` (Neovim) runs exactly this, and so does
+# .github/workflows/ci.yml (the self-hosted runner for pushes, GitHub-hosted runners for pull requests).
 # It is a shim: the pipeline lives in the `ci` section of .testing.lua and runs with `testing ci` (testing.nvim,
 # docs/CI.md); scripts/test.sh finds testing.nvim and its dependencies.
 #

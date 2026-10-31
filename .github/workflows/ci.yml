@@ -1,19 +1,25 @@
-# CI of rules.nvim.
+# CI of rules.nvim: one pipeline, two kinds of runner.
 #
-# Pushes to main run on a self-hosted runner (the author's Windows machine). Runner: $REPOS_DIR/tasks-vault/
-# TOOLS/self-hosted-runner.md; start it with `scripts/runners.ps1 ensure rules.nvim` of the nvim config (or
-# `:MyPlugins ci runners`). Without a running runner a push stays "Queued" (no red mark, discarded after 24 h).
-# No `pull_request` trigger here on purpose: a pull request (above all one from a fork) would run its own workflow
-# with the author's rights on this machine. Pull requests run the same pipeline on GitHub-hosted runners (pr.yml).
+# What is checked lives only in the `ci` section of .testing.lua; every leg runs it with `scripts/ci.sh` (`testing ci`),
+# exactly as the pre-push hook and `:Testing ci` do. This file only prepares the machine.
 #
-# The tools (nvim, stylua, luacheck) are expected on the runner's PATH and are not pinned here (the hosted jobs pinned
-# stylua 2.5.2 and luacheck 1.2.0); every job prints the versions it used.
+# - push to main: the self-hosted runner (the maintainer's local Windows machine), tools on its PATH. Without a running
+#   runner a push stays "Queued" (no red mark, discarded after 24 h).
+# - pull_request (also from forks): GitHub-hosted runners, a throwaway VM with a read-only token and no secrets (every
+#   dependency is a public repository). A pull request never runs on the self-hosted runner: it would run its own
+#   workflow code on the maintainer's machine. The hosted legs pin the versions the self-hosted runner has (nvim
+#   0.12.2, stylua 2.5.2, luacheck 1.2.0); a difference between the two is a finding.
+# - publish-ci-verified: after a green push only, on the self-hosted runner.
+#
+# A fork can edit this file in its pull request (e.g. `runs-on: self-hosted`). The repository therefore requires
+# approval before a workflow of an outside contributor runs; never approve a pull request that touches `.github/`.
 
 name: CI
 
 on:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
   contents: read
@@ -22,74 +28,79 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# `shell: bash` resolves to the WSL launcher on this machine; Git Bash is named explicitly, in 8.3 form because the
-# shell string is split at spaces.
-defaults:
-  run:
-    shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}
-
 jobs:
-  stylua:
-    name: stylua (format check)
-    runs-on: [self-hosted, windows]
-    timeout-minutes: 15
+  pipeline:
+    name: testing ci (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 20
+    strategy:
+      # One platform failing must not cancel the other.
+      fail-fast: false
+      matrix:
+        # push: the whole `full` profile on the self-hosted runner. pull_request: the whole profile on ubuntu, and on
+        # windows the steps that depend on the platform (stylua and luacheck do not).
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"ubuntu","runs-on":"ubuntu-latest","hosted":true,"steps":""},{"name":"windows","runs-on":"windows-latest","hosted":true,"steps":"--step=suite,conformance,contracts"}]' || '[{"name":"windows","runs-on":["self-hosted","windows"],"hosted":false,"steps":""}]') }}
+    defaults:
+      run:
+        # One shell on every runner: `bash` is the WSL launcher on the self-hosted machine, pwsh is everywhere.
+        shell: pwsh
     steps:
-      - uses: actions/checkout@v5
-      - run: stylua --version && stylua --check .
-
-  luacheck:
-    runs-on: [self-hosted, windows]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - run: luacheck --version | head -n1 && luacheck lua TESTS
-
-  tests:
-    name: testing.nvim specs (windows)
-    runs-on: [self-hosted, windows]
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      # Both are resolved by scripts/test.sh and TESTS/minimal_init.lua from
-      # `.deps/<name>` -- see the four lookup places they document. lib.nvim is
-      # a hard runtime dependency (the `:Rules` usercmd goes through
-      # usercmd.composer); testing.nvim is the runner for the specs in TESTS/.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          persist-credentials: false
+      # Found by scripts/test.sh in `.deps/<name>`. lib.nvim and testing.nvim come from the branch that only moves
+      # once the dependency's own CI is green.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
           repository: WKDSteve/lib.nvim
           path: .deps/lib.nvim
           ref: ci-verified
-      # Checked out from the branch that only moves once the dependency's own CI is green.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          persist-credentials: false
           repository: WKDSteve/testing.nvim
           path: .deps/testing.nvim
           ref: ci-verified
-      - run: nvim --version | head -n1
-      - run: |
-          exec > >(tee -a "$RUNNER_TEMP/test-output.log") 2>&1
-          bash scripts/test.sh --json "$RUNNER_TEMP/testing-ir.json"
-      - name: Conformance gate
-        run: bash scripts/test.sh conformance
-      # The TypeScript declarations of the machine contract (schemas/rules-export/1/rules-export.d.ts) are generated
-      # from the JSON Schema next to them; a schema change without `--write` fails here with the first line that
-      # differs. The same check runs as a spec (TESTS/contract_dts_spec.lua); this step names it in the job list.
-      # No Node and no lib.nvim: the generator is a Lua script that nvim runs.
-      - name: Contract declarations are current
-        run: nvim --headless -u NONE -i NONE -n -l scripts/contract-dts.lua --check
-      # The IR is what a reporter or a person reads to find out WHICH case failed.
-      - uses: actions/upload-artifact@v7
+      # Hosted legs only: the tools the self-hosted runner has on its PATH.
+      - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1
+        if: matrix.hosted
+        with:
+          neovim: true
+          version: v0.12.2
+      # The action installs stylua on PATH; `--version` only proves it is there, the check itself is the pipeline's.
+      - uses: JohnnyMorganz/stylua-action@76fd70c03e6340ceaf673366712db9b20560b402 # v5
+        if: matrix.hosted && matrix.steps == ''
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: v2.5.2
+          args: --version
+      # PUC Lua, not "luajit-2.1" (that tarball 404s); `std = "luajit"` in .luacheckrc decides what is checked against.
+      - uses: leafo/gh-actions-lua@6919171ccf181b826f44b9bca76307b577217377 # v13
+        if: matrix.hosted && matrix.steps == ''
+        with:
+          luaVersion: "5.4"
+      - uses: leafo/gh-actions-luarocks@35d062def313a7699a0d513e996bcf4352f05389 # v6
+        if: matrix.hosted && matrix.steps == ''
+      - if: matrix.hosted && matrix.steps == ''
+        run: luarocks install luacheck 1.2.0
+      - name: scripts/ci.sh ${{ matrix.steps }}
+        env:
+          CI_STEPS: ${{ matrix.steps }}
+          CI_REPORT: ${{ runner.temp }}/ci-report.json
+        run: |
+          nvim --version | Select-Object -First 1
+          # Git Bash on Windows (never the WSL launcher), bash elsewhere; scripts/ci.sh is a bash script.
+          $bash = if ($IsWindows) { Join-Path $env:ProgramFiles 'Git\bin\bash.exe' } else { 'bash' }
+          $steps = @($env:CI_STEPS -split ' ' | Where-Object { $_ })
+          & $bash scripts/ci.sh @steps --keep-going --no-agent "--json=$env:CI_REPORT"
+          exit $LASTEXITCODE
+      # The report names every step and, for a red one, its findings or last output lines.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: failure()
         with:
-          name: testing-ir-windows
-          path: ${{ runner.temp }}/testing-ir.json
-          if-no-files-found: ignore
-          retention-days: 14
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: test-output-tests-windows
-          path: ${{ runner.temp }}/test-output.log
+          name: ci-${{ matrix.name }}
+          path: ${{ runner.temp }}/ci-report.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -101,10 +112,15 @@ jobs:
   # moves backwards along main, retries a lost lease).
   publish-ci-verified:
     name: publish ci-verified branch
-    needs: [stylua, luacheck, tests]
+    needs: [pipeline]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, windows]
     timeout-minutes: 15
+    # `shell: bash` resolves to the WSL launcher on this machine; Git Bash is named explicitly, in 8.3 form because
+    # the shell string is split at spaces.
+    defaults:
+      run:
+        shell: C:\PROGRA~1\Git\bin\bash.exe --noprofile --norc -e -o pipefail {0}
     permissions:
       contents: write
     steps:
