@@ -71,6 +71,7 @@ describe("rules.engine.agent.draft", function()
   it("refuses a title with a newline or a control character", function()
     assert.is_nil((draft.accept(answer({ title = "a\nb", body = "x" }))))
     assert.is_nil((draft.accept(answer({ title = ("t"):rep(draft.MAX_TITLE + 1), body = "x" }))))
+    assert.is_nil((draft.accept(answer({ title = "see /home/x/a.lua", body = "x" }))))
   end)
 end)
 

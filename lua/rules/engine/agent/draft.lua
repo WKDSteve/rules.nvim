@@ -138,6 +138,9 @@ function M.accept(answer)
     if type(title) ~= "string" or title == "" or #title > M.MAX_TITLE or title:find("[%c]") then
       return nil, ("title must be a single line of at most %d bytes"):format(M.MAX_TITLE)
     end
+    if has_absolute(title) then
+      return nil, "the title carries a path of another machine"
+    end
   end
   return { title = title, body = body }
 end
