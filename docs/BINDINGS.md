@@ -254,25 +254,11 @@ writes a ruleset in the one-file-per-rule form ([RULESET-FORMAT.md](RULESET-FORM
   skips the question). The door is asked with a dry run before the question,
   so a rule that is not there or a `--by=` that does not exist is told without a
   question. A session without a screen to ask on needs `--yes`.
-  - **The message names the way back.** Where the rule stood is in no file, only in
-    the answer of the door (`inverse`), so after `retired DEP-03` the command says
-    `put it back with :Rules reinstate DEP-03 --layout=regeln/DEP.md --after=DEP-02`:
-    a line that runs as it stands. It is built from the answer: the layout as the
-    ruleset names it (no machine path), then `--after=<id>`, `--before=<id>` or
-    `--section=<heading> [--first]`, every value written as one word the way the
-    command line reads it (a blank, a tab and a backslash with a backslash before
-    them; a `#` or a `%` needs nothing, `--section=C#\ and\ 100%\ Done`). A rule
-    that stood in **several layouts** gets one line, for the first layout (in the
-    order of the names) the command line can say, and a note that names the others
-    (`it also stood in ...`): `reinstate` takes one place, so the rule is put in the
-    others by hand or through `reinstate` with `places` in `rules-ops/1`. What the
-    command line has no word for is a note and not a line: the **top** of a layout
-    (the note says that `:Rules reinstate <id>` alone puts it there: the retired
-    file keeps the place), the **n-th** section of one heading text and a **line** of a
-    section (a rule that stood between two pieces of text). The blank lines
-    around the old place (`gap`) are not part of the line either, which the note
-    says when they matter: the rule is back at its place, the layout may read a
-    little different. A dry run, a declined question and a refusal tell no line.
+  - **The message names the way back.** After `retired DEP-03` it says `put it back with
+    :Rules reinstate DEP-03`: the retired file keeps where the rule stood in every layout
+    (`place`, see [RULESET-FORMAT.md](RULESET-FORMAT.md#retired-rules)), and a `reinstate` without a place of its own
+    takes it. A place that no longer fits is told in a warning and the rule comes back in no layout. A dry run, a
+    declined question and a refusal tell no line.
 - **`reinstate` is the way back from `retire`** and goes the same way: the door is
   asked with a dry run first (a rule that is not retired, an id that is loaded again, a
   place that does not exist is told, word for word, without a question), `--dry`

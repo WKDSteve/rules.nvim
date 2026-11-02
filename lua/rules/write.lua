@@ -210,15 +210,9 @@ function M.messages(result, op_list)
   for i, entry in ipairs(result.entries) do
     local level, text = describe(entry, op_list[i] or {})
     out[#out + 1] = { level = level, text = text }
-    -- the old place of a retired rule is in no file, only in this answer: told as the line that puts it back
-    if entry.ok and entry.outcome == "retired" and entry.inverse then
-      local hint = require("rules.cmdline").reinstate_hint(entry.id or (op_list[i] or {}).id or "?", entry.inverse)
-      if hint.command then
-        out[#out + 1] = { level = "info", text = "put it back with " .. hint.command }
-      end
-      for _, note in ipairs(hint.notes) do
-        out[#out + 1] = { level = "info", text = note }
-      end
+    -- the old place of a retired rule is kept in its file: the plain command puts it back there
+    if entry.ok and entry.outcome == "retired" and entry.id then
+      out[#out + 1] = { level = "info", text = "put it back with :Rules reinstate " .. entry.id }
     end
     -- told after the line that says what was made, at a level a person notices: the rule IS made
     for _, warning in ipairs(entry.warnings or {}) do
