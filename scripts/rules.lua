@@ -16,6 +16,8 @@
 --        to stdout. `--params` is the JSON of the method's parameters (`-` reads it from stdin).
 -- locate `locate [--] <id>`: where the file of a rule is, as two plain lines (the file, then the ruleset it was loaded
 --        from); not a document, since no document carries a path of this machine. Exit 1 for an id nobody holds.
+-- intent `intent <file|-> [--family=F] [--severity=S] [--yes]`: an intent `wkd-intent/1` (docs/CONTRACT.md "Intents");
+--        `rules.show` prints the rule document, `rules.new` is a dry run (`would_create`) unless `--yes` saves it.
 -- list   `rules.list` with the parameters as flags; `--format=json` is the only format.
 --
 -- Exit code: 0 an answer, 1 an error document (also on stdout), 2 wrong usage or no lib.nvim.
@@ -60,14 +62,15 @@ vim.opt.rtp:append(vim.fn.escape(lib, ","))
 
 local function usage()
   io.stderr:write(
-    "usage: rules.lua call <method> [--params=<json>|-] | locate [--] <id> | list --format=json [--family=F] [--severity=S] "
+    "usage: rules.lua call <method> [--params=<json>|-] | locate [--] <id> | "
+      .. "intent <file|-> [--family=F] [--severity=S] [--yes] | list --format=json [--family=F] [--severity=S] "
       .. "[--limit=N] [--offset=N]   (options: --ruleset=PATH --gate=NAME=FAM,FAM --vault=DIR --project=DIR --trust=DIR)\n"
   )
   os.exit(2)
 end
 
 local command = _G.arg[1]
-if command ~= "call" and command ~= "list" and command ~= "locate" then
+if command ~= "call" and command ~= "list" and command ~= "locate" and command ~= "intent" then
   usage()
 end
 
@@ -83,6 +86,7 @@ local KNOWN = {
   vault = "value",
   project = "value",
   trust = "value",
+  yes = "switch",
 }
 local flags, rulesets, gates, trust, positional = {}, {}, {}, {}, {}
 local flags_done = false
@@ -93,6 +97,9 @@ for i = 2, #_G.arg do
     flags_done = true
   elseif not flags_done and a:sub(1, 2) == "--" then
     local key, value = a:match("^%-%-([^=]+)=(.*)$")
+    if not key and KNOWN[a:sub(3)] == "switch" then
+      key, value = a:sub(3), "true"
+    end
     if not key or not KNOWN[key] or value == "" then
       usage()
     end
@@ -139,6 +146,41 @@ if command == "locate" then
     os.exit(1)
   end
   io.stdout:write(found.file, "\n", found.root or "", "\n")
+  io.stdout:flush()
+  os.exit(0)
+end
+
+if command == "intent" then
+  -- `intent <file|->`: one intent `wkd-intent/1` from a file or stdin. The document goes to stdout; exit 1 and an
+  -- error line on stderr for an intent the engine refuses.
+  if #positional ~= 1 then
+    usage()
+  end
+  local raw
+  if positional[1] == "-" then
+    raw = io.stdin:read("*a")
+  else
+    local file = io.open(positional[1], "rb")
+    if not file then
+      io.stderr:write("error: cannot read ", positional[1], "\n")
+      os.exit(1)
+    end
+    raw = file:read("*a")
+    file:close()
+  end
+  local intent_mod = require("rules.intent")
+  local intent, ierr = intent_mod.parse(raw)
+  if not intent then
+    io.stderr:write("error: ", ierr.code, ": ", ierr.message, "\n")
+    os.exit(1)
+  end
+  opts.family, opts.severity, opts.yes = flags.family, flags.severity, flags.yes == "true"
+  local result, rerr = intent_mod.run(intent, opts)
+  if not result then
+    io.stderr:write("error: ", rerr.code, ": ", rerr.message, "\n")
+    os.exit(1)
+  end
+  io.stdout:write(vim.json.encode(result), "\n")
   io.stdout:flush()
   os.exit(0)
 end

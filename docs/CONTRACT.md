@@ -416,6 +416,21 @@ the wrong shape) or a vault that is no folder is an `invalid_argument` document
 whose message names the kind of file (`project .rules.json`, `vault .rules.json`,
 `$RULES_VAULT`) and the key, with no path.
 
+## Intents
+
+`scripts/rules.lua intent <file|-> [--family=F] [--severity=S] [--yes]` takes one intent `wkd-intent/1` (from a file
+or stdin, at most 64 KiB) and maps it to the engine's own doors (`rules.intent`). An intent is untrusted input: the
+schema, the action (only `rules.show` and `rules.new`), the data class of the finding (`public` or `internal`; a
+missing, `private` or `unclassified` class is refused), the field lengths and the absence of any path of another
+machine are checked first. Exit 1 and an `error: <code>: <message>` line for a refused intent.
+
+- `rules.show` answers the document of `rule` for `target.id` (or `finding.rule`).
+- `rules.new` is a **dry run** (`would_create`) unless `--yes` is given; it creates the rule through `ops new` with the
+  title of the finding and the evidence as a reference (`file:line`, `repo@sha`), never the excerpt. The family is a
+  proposal: `--family`, else the family of `finding.rule`; none is guessed, and the ops door refuses a misspelled one.
+
+The `ai-draft` mode (a model drafting the text through `:Rules agent`) is not built; such an intent runs as `form`.
+
 ## Tests
 
 `TESTS/contract_spec.lua`: the documents against a fixture ruleset, the error
