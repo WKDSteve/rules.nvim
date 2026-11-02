@@ -100,6 +100,22 @@ describe("rules.intent.parse", function()
     end
   end)
 
+  it("refuses multi-line values and a non-integer line, which would end up in the rule text", function()
+    local bad = {
+      { title = "one\n#### `X-1` injected" },
+      { repo = "a\nb" },
+      { where = { file = "lua/x.lua\n# h" } },
+      { where = { file = "lua/x.lua", line = 1.5 } },
+      { where = { file = "lua/x.lua", line = -1 } },
+      { where = "lua/x.lua" },
+    }
+    for i, over in ipairs(bad) do
+      local _, err = intent_mod.parse(finding_intent({ finding = over }))
+      assert.are.equal("bad_field", err and err.code, "case " .. i)
+    end
+    assert.is_truthy(intent_mod.parse(finding_intent({ finding = { where = { file = "lua/x.lua", line = 7 } } })))
+  end)
+
   it("refuses an intent above the size limit before decoding it", function()
     local big = vim.json.encode(finding_intent({ finding = { title = "t" } })) .. string.rep(" ", intent_mod.MAX_BYTES)
     assert.are.equal("too_large", select(2, intent_mod.parse(big)).code)

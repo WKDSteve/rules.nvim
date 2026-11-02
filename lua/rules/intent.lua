@@ -92,6 +92,15 @@ local function find_absolute(value, depth)
   return nil
 end
 
+---A short single-line string: these values end up in the text of a rule, so no newline or other control
+---character may smuggle markup in.
+---@param value any
+---@param max integer
+---@return boolean
+local function plain(value, max)
+  return type(value) == "string" and #value <= max and not value:find("[%c]")
+end
+
 ---Check and normalise an intent.
 ---@param input string|table  JSON text or the decoded table
 ---@return Rules.Intent|nil intent
@@ -138,13 +147,25 @@ function M.parse(input)
   if hit then
     return fail("absolute_path", "an intent never carries a path of another machine")
   end
-  if finding.title ~= nil and (type(finding.title) ~= "string" or #finding.title > M.MAX_TITLE) then
-    return fail("bad_field", ("finding.title is a string of at most %d bytes"):format(M.MAX_TITLE))
+  if finding.title ~= nil and not plain(finding.title, M.MAX_TITLE) then
+    return fail("bad_field", ("finding.title is a single-line string of at most %d bytes"):format(M.MAX_TITLE))
   end
   for _, key in ipairs({ "repo", "sha", "rule", "severity", "family" }) do
     local v = finding[key]
-    if v ~= nil and (type(v) ~= "string" or #v > M.MAX_SHORT) then
-      return fail("bad_field", ("finding.%s is a string of at most %d bytes"):format(key, M.MAX_SHORT))
+    if v ~= nil and not plain(v, M.MAX_SHORT) then
+      return fail("bad_field", ("finding.%s is a single-line string of at most %d bytes"):format(key, M.MAX_SHORT))
+    end
+  end
+  if finding.where ~= nil then
+    local where = finding.where
+    if type(where) ~= "table" then
+      return fail("bad_field", "finding.where must be an object")
+    end
+    if where.file ~= nil and not plain(where.file, M.MAX_SHORT) then
+      return fail("bad_field", "finding.where.file is a single-line string")
+    end
+    if where.line ~= nil and not (type(where.line) == "number" and where.line >= 0 and where.line % 1 == 0) then
+      return fail("bad_field", "finding.where.line is a non-negative integer")
     end
   end
   if data.target and data.target.id ~= nil and (type(data.target.id) ~= "string" or #data.target.id > M.MAX_SHORT) then
