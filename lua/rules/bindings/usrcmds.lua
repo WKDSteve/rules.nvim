@@ -332,7 +332,8 @@ function M.setup()
           desc = "With --intent: the severity of the new rule",
         },
       },
-      desc = "Ask a model (ai.nvim) about manual rules: an ID, or --family=PREFIX --manual; the answers go to :Rules review. --intent=FILE takes a finding",
+      desc = "Ask a model (ai.nvim) about manual rules: an ID, or --family=PREFIX --manual; the answers go to :Rules review."
+        .. " --intent=FILE takes a finding",
       run = function(ctx)
         if ctx.flags.intent then
           return require("rules.ui.cmd").intent(ctx)
