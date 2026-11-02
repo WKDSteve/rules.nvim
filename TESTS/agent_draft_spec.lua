@@ -55,6 +55,8 @@ describe("rules.engine.agent.draft", function()
       ["inner heading"] = "text\n## Sub\nbody",
       ["windows path"] = "open C:\\Users\\x\\a.lua now",
       ["unix path"] = "open /home/x/a.lua now",
+      ["setext underline"] = "Title\n=====\nbody",
+      ["rule line"] = "text\n---\nbody",
     }
     for name, body in pairs(cases) do
       local ok, err = draft.accept(answer({ body = body }))

@@ -130,6 +130,12 @@ function M.accept(answer)
   if body:find("```", 1, true) or body:find("^#+%s") or body:find("\n#+%s") then
     return nil, "the body carries a code fence or a heading (the rule file has its own)"
   end
+  -- A line of only `=` or `-` under a text line is a setext heading (and a lone `---` a front matter fence).
+  for line in (body .. "\n"):gmatch("(.-)\n") do
+    if line:match("^%s*=+%s*$") or line:match("^%s*%-%-+%s*$") then
+      return nil, "the body carries a heading underline or a rule line"
+    end
+  end
   if has_absolute(body) then
     return nil, "the body carries a path of another machine"
   end
