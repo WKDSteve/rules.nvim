@@ -439,4 +439,105 @@ function M.run(opts)
   end)
 end
 
+---@class Rules.Agent.DraftOpts
+---@field intent Rules.Intent  # A parsed `rules.new` intent (`rules.intent.parse`).
+---@field family? string
+---@field severity? string
+---@field root? string  # The project; default the working directory.
+---@field yes? boolean  # Do not ask before sending.
+---@field backend? string
+---@field model? string
+---@field ask? fun(req: table, cb: fun(ok: boolean, res: any))  # Replaces the transport (a spec, or a host).
+---@field confirm? fun(question: string, cb: fun(accepted: boolean))
+---@field done fun(draft: { body: string, title?: string, provider: string, model: string|nil }|nil, err: string|nil)
+
+--- Mode `ai-draft` of a `rules.new` intent: ask a model to word the body of the rule, check the answer, hand it back.
+--- The request carries only the title, family, severity and the evidence reference (`rules.intent.draft_subject`);
+--- the destination is allowed and shown as for every agent run, and nothing is sent without a yes (`opts.yes`, or the
+--- question). The result is a proposal for the form of `:Rules new`; it writes nothing.
+---@param opts Rules.Agent.DraftOpts
+---@return nil
+function M.draft(opts)
+  local done = opts.done
+  local function refuse(text)
+    notify.error(text)
+    done(nil, text)
+  end
+  local root = opts.root or vim.fn.getcwd()
+  local res = settings.resolve({ project = root })
+  settings.notify(res)
+  local settings_err = settings.error_text(res, false)
+  if settings_err then
+    return refuse(settings_err)
+  end
+  local subject, subject_err = require("rules.intent").draft_subject(opts.intent, opts)
+  if not subject then
+    return refuse(subject_err.message)
+  end
+  local dest, dest_err = M.destination(res.agent, opts)
+  if not dest then
+    return refuse(dest_err --[[@as string]])
+  end
+  local transport = opts.ask or M.transport
+  if not transport then
+    local ok, ai = pcall(require, "ai")
+    if not ok or type(ai.ask) ~= "function" then
+      return refuse("no transport for the ai-draft mode: ai.nvim is not installed (or has no ask); nothing was sent")
+    end
+    transport = ai.ask
+  end
+
+  local draft_lib = require("rules.engine.agent.draft")
+  local req = draft_lib.build(subject)
+  local line = ("draft: 1 request, ~%d tokens, to %s (%s)%s"):format(
+    math.ceil(req.chars / 4),
+    dest.provider,
+    dest.model or "the backend's default model",
+    dest.is_local and ", local backend" or ", NOT local: the title and the evidence reference leave this machine"
+  )
+
+  local function go()
+    transport({
+      system = req.system,
+      prompt = req.prompt,
+      provider = dest.provider,
+      model = dest.model,
+      bulk = { label = "rules.nvim draft", max_chars = req.chars + 2000, concurrency = 1 },
+    }, function(ok, answer)
+      if not ok then
+        local message = type(answer) == "table" and (answer.message or vim.inspect(answer)) or tostring(answer)
+        return refuse("draft: the request failed: " .. message)
+      end
+      local text = type(answer) == "table" and answer.text or nil
+      local accepted, accept_err = draft_lib.accept(text)
+      if not accepted then
+        return refuse("draft: " .. accept_err .. "; use the form")
+      end
+      accepted.provider, accepted.model = dest.provider, dest.model
+      done(accepted, nil)
+    end)
+  end
+
+  notify.info(line)
+  if opts.yes then
+    return go()
+  end
+  local confirm = opts.confirm
+  if not confirm then
+    if #vim.api.nvim_list_uis() == 0 then
+      return refuse("the draft asks before it sends, and there is nobody to ask: run it with --yes")
+    end
+    confirm = function(q, cb)
+      require("rules.ui.confirm").yesno(q, "send", cb)
+    end
+  end
+  confirm("Send to the model?\n\n" .. line .. "\n\n" .. req.prompt, function(accepted)
+    if not accepted then
+      notify.info("draft: nothing was sent")
+      return done(nil, "declined")
+    end
+    go()
+  end)
+end
+
 return M

@@ -350,6 +350,78 @@ function M.new(ctx)
   })
 end
 
+-- ── intent ──────────────────────────────────────────────────────────────────────
+
+---`:Rules agent --intent=<file>`: an intent `wkd-intent/1` of another app. `rules.show` opens the rule; `rules.new`
+---opens the form of `:Rules new` filled from the finding (title, family proposal, severity, text with the evidence
+---reference). Mode `ai-draft` first asks a model for the body of the text (`rules.agent.draft`, allowed destination,
+---asks before it sends); the draft only fills the form, which asks before it creates anything.
+---@param ctx table  the flags `intent`, `family`, `severity`, `yes`, `backend`, `model`
+---@param seam? { ask?: function, confirm?: function }  specs: the transport and the question
+function M.intent(ctx, seam)
+  seam = seam or {}
+  local intents = require("rules.intent")
+  local path = ctx.flags.intent
+  local file = type(path) == "string" and io.open(path, "rb") or nil
+  if not file then
+    notify.error(("cannot read the intent file %s"):format(tostring(path)))
+    return
+  end
+  local raw = file:read(intents.MAX_BYTES + 1)
+  file:close()
+  local intent, err = intents.parse(raw or "")
+  if not intent then
+    notify.error(("intent refused (%s): %s"):format(err.code, err.message))
+    return
+  end
+
+  if intent.action == "rules.show" then
+    local result, run_err = intents.run(intent, require("rules.contract").editor_opts())
+    if not result then
+      notify.error(("intent refused (%s): %s"):format(run_err.code, run_err.message))
+      return
+    end
+    local id = result.document and result.document.rule and result.document.rule.id
+    if type(id) == "string" then
+      M.open_rule(id)
+    end
+    return
+  end
+
+  local given = { family = ctx.flags.family, severity = ctx.flags.severity }
+  local function fill(body)
+    local op, op_err = intents.new_op(intent, vim.tbl_extend("force", given, { body = body and body.body }))
+    if not op then
+      notify.error(("intent refused (%s): %s"):format(op_err.code, op_err.message))
+      return
+    end
+    M.new_form({
+      family = op.family,
+      title = body and body.title or op.title,
+      severity = op.severity,
+      text = op.text,
+    })
+  end
+
+  if intent.mode ~= "ai-draft" then
+    return fill(nil)
+  end
+  require("rules.agent").draft({
+    intent = intent,
+    family = given.family,
+    severity = given.severity,
+    yes = ctx.flags.yes == true,
+    backend = ctx.flags.backend,
+    model = ctx.flags.model,
+    ask = seam.ask,
+    confirm = seam.confirm,
+    done = function(draft)
+      -- a refused or failed draft is told by the agent; the form still opens, with the plain text of the finding
+      fill(draft)
+    end,
+  })
+end
+
 -- ── set ─────────────────────────────────────────────────────────────────────────
 
 ---`:Rules set <ID> key=value ... [--dry]`

@@ -162,6 +162,15 @@ COMMANDS                                                        *rules-commands*
     Without ai.nvim the command says so and sends nothing. Answers are cached
     by rule, files, backend and model (--refresh asks again). See |:Rules_review|.
 
+:Rules agent --intent={FILE} [--yes] [--backend={ID}] [--model={NAME}]
+             [--family={PREFIX}] [--severity={SEVERITY}]
+    Takes an intent `wkd-intent/1` of another app (a finding of testing.nvim).
+    `rules.show` opens the rule file. `rules.new` opens the |:Rules_new| form
+    filled from the finding; in mode `ai-draft` a model first words the text
+    (title, family, severity and the evidence reference are all it is sent;
+    the destination is allowed and shown, and you are asked before it sends).
+    The form asks again before anything is created.
+
                                                                  *:Rules_review*
 :Rules review
     The proposals of this session, one block each, marked PROPOSED, with the

@@ -321,9 +321,22 @@ function M.setup()
         { name = "refresh", bool = true, desc = "Ask again even when an answer is cached" },
         { name = "backend", type = "STRING", desc = "ai.nvim backend (default: first of agent.backends, else ollama)" },
         { name = "model", type = "STRING", desc = "Model (default: first of agent.models)" },
+        {
+          name = "intent",
+          type = "STRING",
+          desc = "An intent file (wkd-intent/1) of another app",
+        },
+        {
+          name = "severity",
+          type = "STRING",
+          desc = "With --intent: the severity of the new rule",
+        },
       },
-      desc = "Ask a model (ai.nvim) about manual rules: an ID, or --family=PREFIX --manual; the answers go to :Rules review",
+      desc = "Ask a model (ai.nvim) about manual rules: an ID, or --family=PREFIX --manual; the answers go to :Rules review. --intent=FILE takes a finding",
       run = function(ctx)
+        if ctx.flags.intent then
+          return require("rules.ui.cmd").intent(ctx)
+        end
         require("rules.agent").run({
           id = ctx.args.id,
           family = ctx.flags.family,

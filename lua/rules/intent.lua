@@ -15,8 +15,9 @@
 --- misspelled family is refused by the ops door (`Rules.Ops.family_error`), a class other than `public`/`internal`
 --- is refused here.
 ---
---- Not here: the `ai-draft` mode (a model drafting the text through `:Rules agent`). Such an intent is accepted
---- and handled as `form`; the result says which mode it ran in.
+--- Mode `ai-draft` (a model words the body of the rule): the model call is not here -- `rules.agent.draft` makes
+--- it and hands the checked body (`engine/agent/draft`) back as `opts.body`. Without a body (a headless run, no
+--- transport) an `ai-draft` intent is handled as `form`; the result says which mode it ran in.
 ---
 ---@see rules.ops
 ---@see rules.api
@@ -99,6 +100,14 @@ end
 ---@return boolean
 local function plain(value, max)
   return type(value) == "string" and #value <= max and not value:find("[%c]")
+end
+
+---Does a text carry a control character other than newline and tab?
+---@param text string
+---@return boolean
+local function has_control(text)
+  local stripped = text:gsub("[\n\t]", "")
+  return stripped:find("%c") ~= nil
 end
 
 ---Check and normalise an intent.
@@ -216,7 +225,7 @@ end
 
 ---Map a `rules.new` intent to the `new` operation of the ops door.
 ---@param intent Rules.Intent
----@param opts? { family?: string, severity?: string }
+---@param opts? { family?: string, severity?: string, body?: string }  `body`: the drafted prose (mode `ai-draft`)
 ---@return table|nil op
 ---@return Rules.IntentError|nil err
 function M.new_op(intent, opts)
@@ -237,12 +246,48 @@ function M.new_op(intent, opts)
   elseif not SEVERITIES[severity] then
     return fail("bad_field", "severity must be critical, recommended or nice-to-have")
   end
-  local text = title .. "."
+  local text = (type(opts.body) == "string" and opts.body ~= "") and opts.body or (title .. ".")
+  if has_control(text) then
+    return fail("bad_field", "the body carries a control character")
+  end
   local ref = evidence(finding)
   if ref then
     text = text .. "\n\nEvidence: " .. ref .. "."
   end
   return { op = "new", family = family, title = title, severity = severity, text = text }
+end
+
+---What a model is asked to word for a `rules.new` intent: the same title, family, severity and evidence
+---*reference* the rule would carry, nothing else (see `engine/agent/draft`).
+---@param intent Rules.Intent
+---@param opts? { family?: string, severity?: string }
+---@return Rules.Draft.Subject|nil subject
+---@return Rules.IntentError|nil err
+function M.draft_subject(intent, opts)
+  if intent.action ~= "rules.new" then
+    return fail("bad_action", "only rules.new is drafted")
+  end
+  local op, err = M.new_op(intent, opts)
+  if not op then
+    return nil, err
+  end
+  return {
+    title = op.title,
+    family = op.family,
+    severity = op.severity,
+    reference = evidence(intent.finding or {}),
+  }
+end
+
+---The mode a run really ran in: `ai-draft` only when a drafted body came with it, else the form's.
+---@param intent Rules.Intent
+---@param opts? { body?: string }
+---@return "form"|"ai-draft"|"agent"
+function M.mode_of(intent, opts)
+  if intent.mode == "ai-draft" and not (opts and type(opts.body) == "string" and opts.body ~= "") then
+    return "form"
+  end
+  return intent.mode
 end
 
 ---Run an intent against the engine.
@@ -278,7 +323,7 @@ function M.run(intent, opts)
     local why = entry.error and (entry.error.message or entry.error.code) or "the operation failed"
     return fail("bad_field", tostring(why))
   end
-  return { action = intent.action, mode = intent.mode, dry_run = dry_run, document = doc }
+  return { action = intent.action, mode = M.mode_of(intent, opts), dry_run = dry_run, document = doc }
 end
 
 return M

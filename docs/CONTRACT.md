@@ -429,7 +429,14 @@ machine are checked first. Exit 1 and an `error: <code>: <message>` line for a r
   title of the finding and the evidence as a reference (`file:line`, `repo@sha`), never the excerpt. The family is a
   proposal: `--family`, else the family of `finding.rule`; none is guessed, and the ops door refuses a misspelled one.
 
-The `ai-draft` mode (a model drafting the text through `:Rules agent`) is not built; such an intent runs as `form`.
+The `ai-draft` mode needs the editor: `:Rules agent --intent=<file> [--yes] [--backend=] [--model=] [--family=] [--severity=]`
+asks a model (through `ai.nvim`, an allowed destination, shown first, asked before it sends) to word the body of the
+rule. The request holds only the title, the family, the severity and the evidence reference (`file:line`, `repo@sha`),
+never an excerpt; the answer is checked (`rules.engine.agent.draft`: one JSON object, a bounded body, no control
+character, fence, heading or path of another machine) and fills the form of `:Rules new`, which asks again before
+anything is created. A refused or failed draft says why and opens the form with the plain text of the finding. The
+headless `scripts/rules.lua intent` has no model: such an intent runs as `form` and the result says so (`mode`).
+`rules.show` through `:Rules agent --intent=` opens the rule file.
 
 ## Tests
 
