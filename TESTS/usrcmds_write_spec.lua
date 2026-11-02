@@ -1050,22 +1050,12 @@ describe(":Rules new, set, retire, move, list", function()
       assert.is_nil(read_raw(root .. "/_layouts/" .. SECOND):find("{{rule DEP-01}}", 1, true))
     end)
 
-    it("has no line for the top of a layout, and says the two steps that get there", function()
+    it("has no line for the top of a layout, and says that a reinstate alone puts it there", function()
       put_layout(NAME, { "{{rule DEP-01}}", "", "# Dependencies", "", "## Extra", "", "{{rule DEP-02}}", "" })
       run("Rules retire DEP-01 --yes")
       assert.is_nil(hint_line())
-      local reinstate, move
-      for _, note in ipairs(notes) do
-        reinstate, move =
-          note.text:match(":(Rules reinstate DEP%-01), then :(Rules move DEP%-01 %-%-to=.-) puts it at the top of ")
-        if reinstate then
-          break
-        end
-      end
-      assert.are.equal("Rules move DEP-01 --to=regeln/Dep\\ Rules.md", move)
-      run(assert(reinstate))
-      assert.is_nil(dep_rules():find("{{rule DEP-01}}", 1, true))
-      run(move)
+      assert.is_true(told(":Rules reinstate DEP-01 alone puts it at the top of regeln/Dep Rules.md"))
+      run("Rules reinstate DEP-01 --yes")
       local text = dep_rules()
       assert.is_true(index_of(text, "{{rule DEP-01}}") < index_of(text, "# Dependencies"))
     end)
@@ -1194,7 +1184,10 @@ describe(":Rules new, set, retire, move, list", function()
       assert.are.equal(layout_before, layout_text())
     end)
 
-    it("without a place the rule comes back in no layout, and says why and what to do", function()
+    it("without a place (a retired file that keeps none) the rule comes back in no layout, and says why", function()
+      -- a file retired before the place was kept: the line is not there
+      local file = root .. "/_retired/DEP/DEP-01.md"
+      write_raw(file, (assert(read_raw(file)):gsub("\nplace: [^\n]*", "", 1)))
       local layout_before = layout_text()
       run("Rules reinstate DEP-01")
       assert.are.equal(1, #asked)

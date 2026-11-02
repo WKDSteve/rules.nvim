@@ -284,10 +284,17 @@ the heading when there is none (`:Rules show` jumps there).
 
 A rule that is retired (`rules-ops/1` `retire`, see [CONTRACT.md](CONTRACT.md))
 moves to `<ruleset>/_retired/<FAMILY>/<ID>.md` with some facts added to its
-frontmatter (`status: retired`, `retired`, `was`, `replaced_by`, `reason`). The
+frontmatter (`status: retired`, `retired`, `was`, `place`, `replaced_by`, `reason`). The
 loader does not run a `_retired/` folder, so the rule is no longer run, in no
 gate, in no document; its id stays taken, and `next_id` counts it. Bringing it
 back (`reinstate`) puts the file where it was.
+
+`place` is one line of JSON: where the token stood in each layout, keyed by the layout's `output`
+(`place: {"regeln/DEP.md":{"after":"DEP-01","gap":{"above":1,"below":1}}}`; the fields are those of a place of
+`rules-ops/1`). It is a **hint**: the loader ignores it, and a `reinstate` without a place of its own takes it. When it
+no longer fits (the layout or the anchor rule is gone, a section was renamed) or is not read as a place, `reinstate`
+says so in a warning and brings the rule back in no layout, as for a file without the line (retired before the field
+existed). A place given to `reinstate` always wins.
 
 The check reads the ids of that folder too (without loading the rules): **a live rule
 with the id of a retired one is a `duplicate rule id` error**, in one ruleset and across

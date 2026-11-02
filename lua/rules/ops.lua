@@ -910,9 +910,13 @@ end
 ---@param path_in_root string
 ---@param op table
 ---@param today string
+---@param places? table  where the token stood in each layout (`{ [layout output] = place }`), kept as a hint
 ---@return string[]
-local function retired_lines(path_in_root, op, today)
+local function retired_lines(path_in_root, op, today, places)
   local out = { "status: retired", "retired: " .. today, "was: " .. path_in_root }
+  if places and next(places) then
+    out[#out + 1] = "place: " .. json.encode(json.object(places))
+  end
   if op.replaced_by then
     out[#out + 1] = "replaced_by: " .. op.replaced_by
   end
@@ -987,19 +991,22 @@ local function do_retire(op, ctx)
     if not close then
       return refuse("invalid_argument", "the file has no closed frontmatter")
     end
-    local extra = retired_lines(rel, op, today)
+    -- which layouts hold the rule, and where: for the inverse, for the hint in the retired file and for taking it out
+    local held = {}
+    local places = {}
+    for _, layout in ipairs(layouts_of(root)) do
+      if layout_edit.has(layout.text, op.id) then
+        held[#held + 1] = layout
+        local one = old_place(layout, op.id) or {}
+        one.layout = nil
+        places[layout.output] = json.object(one)
+      end
+    end
+    local extra = retired_lines(rel, op, today, places)
     for i = #extra, 1, -1 do
       table.insert(lines, close, extra[i] .. eol)
     end
     local retired_text = table.concat(lines, "\n")
-
-    -- which layouts hold the rule, and where: for the inverse and for taking it out
-    local held = {}
-    for _, layout in ipairs(layouts_of(root)) do
-      if layout_edit.has(layout.text, op.id) then
-        held[#held + 1] = layout
-      end
-    end
 
     local entry = { ok = true, id = op.id, etag_before = current, changed_ids = {} }
     if ctx.dry then
@@ -1014,11 +1021,7 @@ local function do_retire(op, ctx)
     end
     tx.created[#tx.created + 1] = target
     -- where the rule stood in every layout that held it: `reinstate` puts it back into each of them
-    local places = {}
     for _, layout in ipairs(held) do
-      local one = old_place(layout, op.id) or {}
-      one.layout = nil
-      places[layout.output] = json.object(one)
       local new_text, why = layout_edit.remove(layout.text, op.id)
       if not new_text then
         return stopped(ctx, tx, tostring(why))
@@ -1044,6 +1047,20 @@ local function do_retire(op, ctx)
     })
     return entry
   end)
+end
+
+---The places a retired file kept (`place: {"<layout output>": {...}}`), checked like the `places` of an operation;
+---`nil` when the text is not that.
+---@param id string
+---@param text string
+---@return table|nil places
+local function hint_places(id, text)
+  local ok, decoded = pcall(vim.json.decode, text)
+  if not (ok and type(decoded) == "table" and next(decoded) ~= nil) then
+    return nil
+  end
+  local wheres = placements({ id = id, places = decoded })
+  return wheres and #wheres > 0 and decoded or nil
 end
 
 ---@param op table
@@ -1093,7 +1110,7 @@ local function do_reinstate(op, ctx)
       return fail(ctx, errors.fail("io", "the file of the retired rule cannot be read"))
     end
     local lines = vim.split(bytes, "\n", { plain = true })
-    local was
+    local was, hint
     local kept = {}
     local in_front, ended = false, false
     for i, line in ipairs(lines) do
@@ -1109,8 +1126,12 @@ local function do_reinstate(op, ctx)
           local key, value = bare:match("^([%w_]+):%s*(.-)%s*$")
           if key == "was" then
             was = value
+          elseif key == "place" then
+            hint = value
           end
-          if not (key == "status" or key == "retired" or key == "was" or key == "replaced_by" or key == "reason") then
+          if
+            not (key == "status" or key == "retired" or key == "was" or key == "replaced_by" or key == "reason" or key == "place")
+          then
             kept[#kept + 1] = line
           end
         end
@@ -1124,6 +1145,23 @@ local function do_reinstate(op, ctx)
     end
     local target = root .. "/" .. rel
     local entry = { ok = true, id = op.id, changed_ids = {} }
+    -- no place given: the one `retire` kept in the file, as a hint. A place that no longer fits (a layout or an anchor
+    -- gone, a section renamed) is told and left out: the rule comes back in no layout, as without a hint
+    if #wheres == 0 and hint and hint ~= "" then
+      local places = hint_places(op.id, hint)
+      local fits = false
+      if places then
+        local dry = setmetatable({ dry = true }, { __index = ctx })
+        local hinted = { id = op.id, places = places }
+        local _, why = place_all(dry, new_tx(), root, hinted, placements(hinted))
+        if why == nil then
+          op, wheres, fits = hinted, placements(hinted), true
+        end
+      end
+      if not fits then
+        entry.warnings = json.array({ "the place kept in the retired file no longer fits: the rule is in no layout" })
+      end
+    end
     local text = table.concat(kept, "\n")
     local rule, rerrs = parser.parse_rule_text(target, (text:gsub("\r\n", "\n")))
     if not rule or #rerrs > 0 then

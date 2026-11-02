@@ -335,16 +335,16 @@ describe("rules.cmdline.reinstate_hint", function()
     )
     assert.are.equal(":Rules reinstate DEP-02 --layout=c.md --after=DEP-01", hint.command)
     assert.is_truthy(hint.notes[1]:find('a.md (the top), b.md (the end of the section "Core" (the 2. of that name))', 1, true))
-    -- the top of the only layout: no line, and the two steps that get there
+    -- the top of the only layout: no line, and the note that the kept place does it
     hint = cmdline.reinstate_hint("DEP-02", inverse({ ["my dir/a.md"] = { top = true } }))
     assert.is_nil(hint.command)
     assert.are.equal(2, #hint.notes)
-    assert.is_truthy(hint.notes[2]:find(":Rules reinstate DEP-02, then :Rules move DEP-02 --to=my\\ dir/a.md", 1, true))
-    -- a '#' in the layout name would be read by --to= as a section
+    assert.is_truthy(hint.notes[2]:find(":Rules reinstate DEP-02 alone puts it at the top of my dir/a.md", 1, true))
+    -- a '#' in the layout name is no trouble any more: the kept place is not read by --to=
     hint = cmdline.reinstate_hint("DEP-02", inverse({ ["a#b.md"] = { top = true } }))
     assert.is_nil(hint.command)
-    assert.are.equal(1, #hint.notes)
-    -- a second section of a name alone: no line, no two steps
+    assert.are.equal(2, #hint.notes)
+    -- a second section of a name alone: no line, no note about the top
     hint = cmdline.reinstate_hint("DEP-02", inverse({ ["a.md"] = { section = "Core", nth = 3 } }))
     assert.is_nil(hint.command)
     assert.are.equal(1, #hint.notes)

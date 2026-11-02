@@ -295,6 +295,69 @@ describe("rules-ops/1 layouts: retire and its inverse", function()
     assert.is_true(one(opts, { op = "reinstate", id = "DEP-02", layout = "regeln/DEP.md", section = "A", line = 8 }).ok)
   end)
 
+  describe("the old place kept in the retired file (place:)", function()
+    local LAYOUT = { "## A", "", "{{rule DEP-01}}", "", "{{rule DEP-02}}", "", "{{rule DEP-03}}", "" }
+
+    ---@param root string
+    ---@return string
+    local function retired_text(root)
+      return assert(read_raw(root .. "/_retired/DEP/DEP-02.md"))
+    end
+
+    it("is written as one line of JSON, and the reinstated rule does not keep it", function()
+      local root, opts = fixture(LAYOUT)
+      assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+      local line = retired_text(root):match("\nplace: ([^\n]*)\n")
+      assert.are.same({ ["regeln/DEP.md"] = { after = "DEP-01", gap = { above = 1, below = 1 } } }, vim.json.decode(line))
+      assert.is_true(one(opts, { op = "reinstate", id = "DEP-02", layout = "regeln/DEP.md", after = "DEP-01" }).ok)
+      assert.are.equal(rule_file("DEP-02"), read_raw(root .. "/_rules/DEP/DEP-02.md"))
+    end)
+
+    it("is taken by a reinstate without a place, byte for byte, with no warning", function()
+      local _, opts, path = fixture(LAYOUT)
+      local before = read_raw(path)
+      assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+      local entry = one(opts, { op = "reinstate", id = "DEP-02" })
+      assert.is_true(entry.ok, vim.inspect(entry))
+      assert.is_nil(entry.warnings)
+      assert.are.equal(before, read_raw(path))
+    end)
+
+    it("loses against a place that is given", function()
+      local _, opts, path = fixture(LAYOUT)
+      assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+      assert.is_true(one(opts, { op = "reinstate", id = "DEP-02", layout = "regeln/DEP.md", before = "DEP-01" }).ok)
+      assert.are.same({ section = "A", prev = nil }, layout_edit.locate(read_raw(path), "DEP-02"))
+      assert.is_true(read_raw(path):find("{{rule DEP-02}}", 1, true) < read_raw(path):find("{{rule DEP-01}}", 1, true))
+    end)
+
+    it("is told and left out when the anchor is gone: the rule comes back in no layout", function()
+      local _, opts, path = fixture(LAYOUT)
+      assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+      assert.is_true(one(opts, { op = "retire", id = "DEP-01" }).ok)
+      local after_retire = read_raw(path)
+      local entry = one(opts, { op = "reinstate", id = "DEP-02" })
+      assert.is_true(entry.ok, vim.inspect(entry))
+      assert.is_truthy(tostring(entry.warnings[1]):find("no longer fits", 1, true))
+      assert.are.equal(after_retire, read_raw(path))
+      assert.is_false(layout_edit.has(read_raw(path), "DEP-02"))
+    end)
+
+    it("is ignored when the text is not a place, and a dry run says the same", function()
+      local root, opts, path = fixture(LAYOUT)
+      assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+      local file = root .. "/_retired/DEP/DEP-02.md"
+      write_raw(file, (retired_text(root):gsub("\nplace: [^\n]*\n", "\nplace: {not json\n", 1)))
+      local after_retire = read_raw(path)
+      local dry = ops.run({ ops = { { op = "reinstate", id = "DEP-02" } }, dry_run = true }, opts)
+      assert.is_truthy(tostring(dry.results[1].warnings[1]):find("no longer fits", 1, true))
+      local entry = one(opts, { op = "reinstate", id = "DEP-02" })
+      assert.is_true(entry.ok, vim.inspect(entry))
+      assert.is_truthy(entry.warnings)
+      assert.are.equal(after_retire, read_raw(path))
+    end)
+  end)
+
   it("G4-4: puts a rule that was first of its section back into that section, not into a subsection", function()
     local layout = { "## A", "", "Intro.", "", "{{rule DEP-01}}", "", "### Sub", "", "{{rule DEP-02}}", "", "## B", "" }
     local _, path = retire_and_back(layout, "DEP-01")

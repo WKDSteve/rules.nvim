@@ -496,14 +496,11 @@ function M.reinstate_hint(id, inverse)
       or ": :Rules reinstate has no flag for that place"
     hint.notes[#hint.notes + 1] = lead .. table.concat(rest, ", ") .. tail
   end
-  -- the top of the one layout that held the rule is reached in two steps: back with no place, then moved there
-  -- (`--to=` reads a '#' as the start of a section, so a layout with one in its name has no such line)
+  -- the top of the one layout that held the rule has no flag: the place kept in the retired file takes it back there
   local only = not chosen and #stood == 1 and stood[1]
-  if only and only.place.top and not only.layout:find("#", 1, true) then
-    hint.notes[#hint.notes + 1] = (":Rules reinstate %s, then :Rules move %s --to=%s puts it at the top of %s"):format(
+  if only and only.place.top then
+    hint.notes[#hint.notes + 1] = (":Rules reinstate %s alone puts it at the top of %s: the retired file keeps the place"):format(
       M.escape(id),
-      M.escape(id),
-      M.escape(only.layout),
       only.layout
     )
   end
