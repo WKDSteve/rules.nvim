@@ -1,3 +1,5 @@
+![rules-nvim](assets/icons/rules-nvim/png/rules-nvim-128.png)
+
 > **Alpha — small, working surface.** The engine, the four check types,
 > `:Rules check`/`gate`/`show`/`stats`/`new`/`set`/`retire`/`reinstate`/`move`/`list`/`waive`/`renew`/`unwaive`, `:RulesVault`, and waivers are real and tested.
 > Pin a commit if you depend on this.
