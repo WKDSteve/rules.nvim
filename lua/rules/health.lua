@@ -104,10 +104,10 @@ function M.check()
 
   start("rules.nvim")
 
-  if vim.fn.has("nvim-0.10") == 1 then
+  if vim.fn.has("nvim-0.11") == 1 then
     ok("Neovim " .. tostring(vim.version()))
   else
-    warn("rules.nvim targets Neovim 0.10+", { "Upgrade Neovim to 0.10+" })
+    warn("rules.nvim targets Neovim 0.11+", { "Upgrade Neovim to 0.11+" })
   end
 
   if pcall(require, "lib.nvim.bindings.usercmd.composer") then
