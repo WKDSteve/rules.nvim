@@ -9,7 +9,10 @@
 #   dependency is a public repository). A pull request never runs on the self-hosted runner: it would run its own
 #   workflow code on the maintainer's machine. The hosted legs pin the versions the self-hosted runner has (nvim
 #   0.12.2, stylua 2.5.2, luacheck 1.2.0); a difference between the two is a finding.
-# - publish-ci-verified: after a green push only, on the self-hosted runner.
+# - macOS: a GitHub-hosted leg on every event, also on a push: the repository is public, so it costs nothing, and no
+#   self-hosted runner has macOS. It runs the steps that depend on the platform: the suite, conformance and contracts.
+# - publish-ci-verified: after a green push only, on the self-hosted runner. It waits for macOS too: `ci-verified` means
+#   green on all three systems.
 #
 # A fork can edit this file in its pull request (e.g. `runs-on: self-hosted`). The repository therefore requires
 # approval before a workflow of an outside contributor runs; never approve a pull request that touches `.github/`.
@@ -40,7 +43,7 @@ jobs:
         # Only a push to main uses the self-hosted runner (the whole `full` profile); every other event, also one
         # added later (workflow_dispatch, pull_request_target, ...), gets hosted runners: the whole profile on ubuntu,
         # and on windows the steps that depend on the platform (stylua and luacheck do not).
-        include: ${{ fromJSON(github.event_name == 'push' && '[{"name":"windows","runs-on":["self-hosted","windows"],"hosted":false,"steps":""}]' || '[{"name":"ubuntu","runs-on":"ubuntu-latest","hosted":true,"steps":""},{"name":"windows","runs-on":"windows-latest","hosted":true,"steps":"--step=suite,conformance,contracts"}]') }}
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"name":"windows","runs-on":["self-hosted","windows"],"hosted":false,"steps":""},{"name":"macos","runs-on":"macos-latest","hosted":true,"steps":"--step=suite,conformance,contracts"}]' || '[{"name":"ubuntu","runs-on":"ubuntu-latest","hosted":true,"steps":""},{"name":"windows","runs-on":"windows-latest","hosted":true,"steps":"--step=suite,conformance,contracts"}]') }}
     defaults:
       run:
         # One shell on every runner: `bash` is the WSL launcher on the self-hosted machine, pwsh is everywhere.
