@@ -270,6 +270,28 @@ describe("rules.agent.draft and :Rules agent --intent", function()
     assert.are.equal("Never call vim.fn in a hot loop", forms[1].title)
   end)
 
+  it("sends nothing before a late answer, then the draft after a late yes; a late no stays plain", function()
+    local original = confirm.yesno
+    local answers = {}
+    confirm.yesno = function(_, _, cb)
+      answers[#answers + 1] = cb
+    end
+    vim.cmd("Rules agent --intent=" .. vim.fn.fnameescape(intent_file("ai-draft")))
+    vim.cmd("Rules agent --intent=" .. vim.fn.fnameescape(intent_file("ai-draft")))
+    confirm.yesno = original
+    assert.are.equal(2, #answers)
+    assert.are.equal(0, #calls, "nothing is sent while the question is open")
+    assert.are.equal(0, #forms, "no form while the question is open")
+
+    answers[1](true)
+    assert.are.equal(1, #calls)
+    assert.are.equal("Cache hot calls", forms[1].title)
+
+    answers[2](false)
+    assert.are.equal(1, #calls, "a late no sends nothing")
+    assert.are.equal("Never call vim.fn in a hot loop", forms[2].title)
+  end)
+
   it("refuses a backend that is not local while agent.backends is empty", function()
     vim.cmd("Rules agent --intent=" .. vim.fn.fnameescape(intent_file("ai-draft")) .. " --yes --backend=openai")
     assert.are.equal(0, #calls)
