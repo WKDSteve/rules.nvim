@@ -72,6 +72,30 @@ describe("rules.intent.parse", function()
     assert.are.equal("rules.new", intent.action)
   end)
 
+  it("reads a JSON null as an absent field, as the contract's goldens carry them", function()
+    -- the golden rules.new of appkit/schemas/wkd-intent/1 has `"target": null` and null in the finding; a sender
+    -- (testing act) sends exactly that
+    local text = table.concat({
+      '{"schema":"wkd-intent/1","action":"rules.new","mode":"form",',
+      '"source":{"app":"testing","finding":"0123456789abcdef"},',
+      '"finding":{"schema":"testing-finding/1","fp":"0123456789abcdef","kind":"case",',
+      '"repo":"example.nvim","area":null,"sha":null,"class":"public",',
+      '"where":{"file":"TESTS/parse_spec.lua","line":null},"run":null,',
+      '"title":"parse_spec: an empty line ends the list","excerpt":"","repro":null,"rule":null},',
+      '"target":null}',
+    })
+    local intent, err = intent_mod.parse(text)
+    assert.is_nil(err)
+    assert.are.equal("rules.new", intent.action)
+    assert.is_nil(intent.target)
+    assert.is_nil(intent.finding.rule)
+    assert.is_nil(intent.finding.where.line)
+    -- a Lua caller that hands the decoded document (vim.NIL for null) is read the same way
+    local decoded = assert(intent_mod.parse(vim.json.decode(text)))
+    assert.is_nil(decoded.target)
+    assert.is_nil(decoded.finding.sha)
+  end)
+
   it("refuses an action that belongs to another engine", function()
     local _, err = intent_mod.parse(finding_intent({ action = "tasks.new" }))
     assert.are.equal("bad_action", err.code)

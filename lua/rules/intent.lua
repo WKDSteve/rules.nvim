@@ -73,6 +73,24 @@ local function absolute(value)
   return value:match("^%a:[\\/]") ~= nil or value:match("^[\\/][\\/]") ~= nil or value:match("^/[%w_.~%-]") ~= nil
 end
 
+---A copy of a decoded table without `vim.NIL` (a JSON null is an absent field), depth limited like `find_absolute`.
+---@param value any
+---@param depth integer
+---@return any
+local function without_nulls(value, depth)
+  if value == vim.NIL then
+    return nil
+  end
+  if type(value) ~= "table" or depth > 8 then
+    return value
+  end
+  local out = {}
+  for k, v in pairs(value) do
+    out[k] = without_nulls(v, depth + 1)
+  end
+  return out
+end
+
 ---The first path of this machine anywhere in the value, depth limited.
 ---@param value any
 ---@param depth integer
@@ -115,17 +133,20 @@ end
 ---@return Rules.Intent|nil intent
 ---@return Rules.IntentError|nil err
 function M.parse(input)
-  local data = input
+  local data
   if type(input) == "string" then
     if #input > M.MAX_BYTES then
       return fail("too_large", ("an intent is at most %d bytes"):format(M.MAX_BYTES))
     end
-    local ok, decoded = pcall(vim.json.decode, input)
+    -- a JSON null is an absent field: the contract's goldens carry `"target": null` and nulls in the finding
+    local ok, decoded = pcall(vim.json.decode, input, { luanil = { object = true, array = true } })
     if not ok or type(decoded) ~= "table" then
       return fail("bad_json", "the intent is not a JSON object")
     end
     data = decoded
-  elseif type(input) ~= "table" then
+  elseif type(input) == "table" then
+    data = without_nulls(input, 0)
+  else
     return fail("bad_json", "the intent is not a JSON object")
   end
 
