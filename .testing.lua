@@ -52,8 +52,17 @@ return {
   ci = {
     default = "full",
     profiles = {
-      fast = { "stylua", "luacheck" },
+      -- workflow-in-sync: .github/workflows/ci.yml is the one `workflow` below gives (testing init --workflow=public)
+      fast = { "stylua", "luacheck", "workflow-in-sync" },
       full = { "fast", "suite", "conformance", "contracts" },
+    },
+    -- The GitHub workflow, generated: `testing init --workflow=public --force` writes it (testing.nvim
+    -- docs/WORKFLOW-CI.md). Only what differs from the other public repositories is written here.
+    workflow = {
+      name = "rules.nvim",
+      -- the steps that depend on the platform: the hosted windows and macOS legs run only these
+      platform = { "suite", "conformance", "contracts" },
+      publish = { why = "docmap.nvim checks this repository out to run the rules engine in its standalone gate." },
     },
     steps = {
       luacheck = { preset = "luacheck", args = { "lua", "TESTS" } },

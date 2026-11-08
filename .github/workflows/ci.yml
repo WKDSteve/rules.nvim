@@ -112,12 +112,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # docmap.nvim checks this repo out to run the rules engine in its
-  # standalone gate. Pointing it at `main` means a broken commit here turns that
-  # CI red before anyone traces it back. `ci-verified` only moves once stylua,
-  # luacheck and the tests have passed, so a consumer pinning `ref: ci-verified`
-  # always tests against a known-good commit. Same job as lib.nvim's (never
-  # moves backwards along main, retries a lost lease).
+  # Moves the branch `ci-verified` to a commit whose pipeline is green on all three systems, never backwards along main
+  # (two pushes can finish out of order), and retries a lost lease. A consumer that checks this repository out with
+  # `ref: ci-verified` always tests against a known-good commit. docmap.nvim checks this repository out to run the rules
+  # engine in its standalone gate.
   publish-ci-verified:
     name: publish ci-verified branch
     needs: [pipeline]
