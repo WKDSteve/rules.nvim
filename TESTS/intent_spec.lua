@@ -215,3 +215,33 @@ describe("rules.intent.run", function()
     assert.is_truthy(err)
   end)
 end)
+
+describe("rules.intent against the goldens of wkd-intent/1", function()
+  -- copies of appkit/schemas/wkd-intent/1/examples: the documents a sender really produces, with their JSON nulls
+  local dir = vim.fs.dirname(debug.getinfo(1, "S").source:sub(2)) .. "/intent"
+
+  ---@param name string
+  ---@return string
+  local function golden(name)
+    local f = assert(io.open(dir .. "/" .. name .. ".json", "rb"))
+    local text = f:read("*a")
+    f:close()
+    return text
+  end
+
+  it("takes rules.new and rules.show as JSON text", function()
+    for _, name in ipairs({ "rules.new", "rules.show" }) do
+      local intent, err = intent_mod.parse(golden(name))
+      assert.is_nil(err, name)
+      assert.are.equal(name, intent.action)
+    end
+  end)
+
+  it("refuses the actions of the other engines with the reason, not as a broken document", function()
+    for _, name in ipairs({ "tasks.new", "tasks.show", "ai.handoff" }) do
+      local intent, err = intent_mod.parse(golden(name))
+      assert.is_nil(intent, name)
+      assert.are.equal("bad_action", err.code, name)
+    end
+  end)
+end)
