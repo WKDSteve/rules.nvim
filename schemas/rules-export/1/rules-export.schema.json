@@ -13,6 +13,7 @@
     { "$ref": "#/$defs/waivers" },
     { "$ref": "#/$defs/rulesets" },
     { "$ref": "#/$defs/groupings" },
+    { "$ref": "#/$defs/views" },
     { "$ref": "#/$defs/result" },
     { "$ref": "#/$defs/error" }
   ],
@@ -283,6 +284,60 @@
         }
       ]
     },
+    "views": {
+      "title": "rules.views: the saved views of the vault (<vault>/views/<slug>.md), sorted by id. A file that cannot be read as a view is no view but a line of problems. The rev is that of the views, not of the rules.",
+      "allOf": [
+        { "$ref": "#/$defs/head" },
+        {
+          "type": "object",
+          "required": ["kind", "views", "problems", "rev", "digest"],
+          "properties": {
+            "kind": { "const": "rules.views" },
+            "views": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "title", "display", "group_by", "collapsed", "select", "etag"],
+                "properties": {
+                  "id": { "type": "string", "description": "the name of the file without .md: what view_save and view_delete take" },
+                  "title": { "type": "string" },
+                  "display": { "enum": ["columns", "list", "matrix"] },
+                  "group_by": { "type": "string", "description": "family, severity, status, waiver, or layout:<ruleset>:<output> (a layout field of rules.groupings)" },
+                  "group_by2": { "type": "string", "description": "the second field of a matrix" },
+                  "collapsed": { "type": "array", "items": { "type": "string" } },
+                  "select": {
+                    "type": "object",
+                    "required": ["families", "severities", "statuses", "rulesets"],
+                    "properties": {
+                      "families": { "type": "array", "items": { "type": "string" } },
+                      "severities": { "type": "array", "items": { "type": "string" } },
+                      "statuses": { "type": "array", "items": { "type": "string" } },
+                      "rulesets": { "type": "array", "items": { "type": "string" } },
+                      "query": { "type": "string" }
+                    }
+                  },
+                  "etag": { "type": "string" },
+                  "created": { "type": "string" },
+                  "updated": { "type": "string" }
+                }
+              }
+            },
+            "problems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "file", "message"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "file": { "type": "string", "description": "the file in the vault (views/<name>), no path of the machine" },
+                  "message": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "rulesets": {
       "title": "rules.rulesets: the rulesets that are loaded, and the ones in the archive of the vault.",
       "allOf": [
@@ -361,11 +416,11 @@
                 "required": ["n", "op", "ok", "changed_ids"],
                 "properties": {
                   "n": { "type": "integer", "minimum": 1 },
-                  "op": { "enum": ["new", "set", "retire", "reinstate", "move", "waive", "renew", "remove", "create_ruleset", "archive_ruleset", "restore_ruleset"] },
+                  "op": { "enum": ["new", "set", "retire", "reinstate", "move", "waive", "renew", "remove", "create_ruleset", "archive_ruleset", "restore_ruleset", "view_save", "view_delete"] },
                   "ok": { "type": "boolean" },
                   "id": { "type": "string" },
                   "ruleset": { "type": "string", "description": "create_ruleset, archive_ruleset, restore_ruleset: the folder name of the ruleset (an entry of those operations has no id)" },
-                  "outcome": { "type": "string", "description": "created, changed, unchanged, retired, reinstated, moved, waived, renewed, removed, archived, restored, would_*, conflict, failed" },
+                  "outcome": { "type": "string", "description": "created, changed, unchanged, retired, reinstated, moved, waived, renewed, removed, archived, restored, deleted, would_*, conflict, failed" },
                   "etag_before": { "type": "string" },
                   "etag_after": { "type": "string" },
                   "changed_ids": { "type": "array", "items": { "type": "string" } },

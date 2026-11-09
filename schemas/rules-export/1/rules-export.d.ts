@@ -5,7 +5,19 @@
  *
  * Every document rules.nvim hands to a machine (read only). One of the kinds below, told apart by `kind`. A reader ignores fields it does not know: inside one version the contract only grows. The golden files next to this schema are the documents the engine writes.
  */
-export type RulesExport = Hello | Snapshot | List | Rule | NextId | Sources | Waivers | Rulesets | Groupings | Result | Error;
+export type RulesExport =
+  | Hello
+  | Snapshot
+  | List
+  | Rule
+  | NextId
+  | Sources
+  | Waivers
+  | Rulesets
+  | Groupings
+  | Views
+  | Result
+  | Error;
 
 /**
  * rules.error: what went wrong, in a code that is stable.
@@ -196,9 +208,9 @@ export type Result = Head & {
     inverse?: { [k: string]: unknown };
     n: number;
     ok: boolean;
-    op: "new" | "set" | "retire" | "reinstate" | "move" | "waive" | "renew" | "remove" | "create_ruleset" | "archive_ruleset" | "restore_ruleset";
+    op: "new" | "set" | "retire" | "reinstate" | "move" | "waive" | "renew" | "remove" | "create_ruleset" | "archive_ruleset" | "restore_ruleset" | "view_save" | "view_delete";
     /**
-     * created, changed, unchanged, retired, reinstated, moved, waived, renewed, removed, archived, restored, would_*, conflict, failed
+     * created, changed, unchanged, retired, reinstated, moved, waived, renewed, removed, archived, restored, deleted, would_*, conflict, failed
      */
     outcome?: string;
     placed?: {
@@ -354,6 +366,50 @@ export type Sources = Head & {
   kind: "rules.sources";
   load_errors: string[];
   rev: unknown;
+};
+
+/**
+ * rules.views: the saved views of the vault (<vault>/views/<slug>.md), sorted by id. A file that cannot be read as a view is no view but a line of problems. The rev is that of the views, not of the rules.
+ */
+export type Views = Head & {
+  digest: unknown;
+  kind: "rules.views";
+  problems: {
+    /**
+     * the file in the vault (views/<name>), no path of the machine
+     */
+    file: string;
+    id: string;
+    message: string;
+  }[];
+  rev: unknown;
+  views: {
+    collapsed: string[];
+    created?: string;
+    display: "columns" | "list" | "matrix";
+    etag: string;
+    /**
+     * family, severity, status, waiver, or layout:<ruleset>:<output> (a layout field of rules.groupings)
+     */
+    group_by: string;
+    /**
+     * the second field of a matrix
+     */
+    group_by2?: string;
+    /**
+     * the name of the file without .md: what view_save and view_delete take
+     */
+    id: string;
+    select: {
+      families: string[];
+      query?: string;
+      rulesets: string[];
+      severities: string[];
+      statuses: string[];
+    };
+    title: string;
+    updated?: string;
+  }[];
 };
 
 export type Waiver = {

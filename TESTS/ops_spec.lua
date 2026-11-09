@@ -1189,6 +1189,8 @@ describe("rules-ops/1 the whole request", function()
       "create_ruleset",
       "archive_ruleset",
       "restore_ruleset",
+      "view_save",
+      "view_delete",
     }, doc.ops)
     assert.is_true(vim.tbl_contains(doc.capabilities, "ops"))
   end)

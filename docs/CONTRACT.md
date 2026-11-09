@@ -83,6 +83,7 @@ left out. At most 256 KiB.
 | `waivers` | `project` | `rules.waivers`: the waivers of a project, each with `expired` and `known`, see [Waivers](#waivers). |
 | `rulesets` | none | `rules.rulesets`: the loaded rulesets (`name`, `folder`, `in_vault`; an empty one too) and the `archived` folder names of the vault, see [Rulesets](#rulesets). No path. |
 | `groupings` | none | `rules.groupings`: the fields a view of the rules groups by, their values in order and how a drag between two groups is written (`mode`), one field per layout with the section of each of its rules, see [Groupings](#groupings). |
+| `views` | none | `rules.views`: the saved views of the vault (`<vault>/views/<slug>.md`) and the files that are no view (`problems`), see [Views](#views). |
 | `ops` | `client_op_id`, `dry_run`, `ops` (flat: the fields are the request's own) | `rules.result`: one entry per operation, see [rules-ops/1](#rules-ops1-write). |
 
 ### `etag` and `etag_scope`
@@ -113,6 +114,16 @@ There is one `layout` field for each layout of each ruleset, with `ruleset` (the
 `output` path, what a place names), sorted by both. `members` says the section each loaded rule of the layout stands in
 (`""` above every heading); a rule that is not among them is not in that layout. A token of a rule that is not loaded is
 no member. The `rev` covers the rule files and the layouts, so a `move` (which changes only a layout) is a new state.
+
+### Views
+
+A saved view is a way to look at the rules, not a rule: a selection, the field it groups by (for a matrix a second
+one), how it is drawn and the groups that are folded. It is a small Markdown file of the vault, `<vault>/views/<slug>.md`
+(not of a ruleset: a view may show the rules of several), so it is the same on every machine; the engine writes it only
+through `view_save` and `view_delete`, on the version read. `rules.views` lists them sorted by `id` (the name of the
+file); a file there that cannot be read as a view is no view but a line of `problems` (`id`, `file` in the vault,
+`message`, without a path of the machine), and never hides the others. A view that names a layout which is gone is the
+client's to show. A folder `views` that is a symbolic link is one problem and is neither read nor written.
 
 ### `editable`
 
@@ -181,6 +192,8 @@ is true only if all entries are. `dry_run` checks everything and writes nothing.
 | `waive` | `id`, `reason`, `expires`?, `paths`?, `project`?, `if_match`? | Adds the waiver of a project's `.rules-waivers.json` (not a ruleset file). `inverse`: `remove`. See [Waivers](#waivers). |
 | `renew` | `id`, `expires` or `no_expiry`, `reason`?, `project`?, `if_match`? | Gives a waiver a new last day. `inverse`: `renew` back. |
 | `remove` | `id`, `project`?, `if_match`? | Drops a waiver. `inverse`: `waive` with the old values. |
+| `view_save` | `id`?, `view`, `if_match`? | Makes or replaces a saved view (`rules.views`). `view` is `{ title, display, group_by, group_by2?, collapsed?, select? }`: the title one line of at most 300 characters, `display` `columns`, `list` or `matrix`, `group_by` a field of `rules.groupings` (`family`, `severity`, `status`, `waiver`, or `layout:<ruleset>:<output>`), `group_by2` only for a `matrix` and another field, `select` with `families`, `severities`, `statuses`, `rulesets` (lists, empty narrows nothing) and `query`, at most 100 entries of at most 300 characters in a list. Without `id` a new file `<vault>/views/<slug>.md` is made, the name taken from the title (a taken one gets `-2`, `-3`); with `id` that view is replaced, only on the version read (a view that exists and no `if_match`, or a stale one, is a `conflict`); an `id` that is free is made. The same view again is `unchanged`. `inverse`: a `view_delete` of a view made, a `view_save` of the old view for a change. |
+| `view_delete` | `id`, `if_match` | Deletes a saved view, on the version read: `if_match` is required (a view is shared by every machine of the vault; missing: `invalid_argument`, stale: `conflict`). `inverse`: a `view_save` that makes it again. |
 | `create_ruleset` | `name` | Makes a ruleset in the vault: `rulesets/<name>/_rules/.gitkeep` and `_layouts/.gitkeep`, and adds `rulesets/<name>` to the `rulesets` list of the vault's `.rules.json` when that file has a list that does not offer it. `name`: letters, digits, `.`, `_`, `-`, starting with a letter or digit, no Windows device name. A folder of that name in any letter case is `conflict`. `inverse`: `archive_ruleset`. See [Rulesets](#rulesets). |
 | `archive_ruleset` | `name` | MOVES `rulesets/<name>` to `archive/rulesets/<name>` and takes it out of the `.rules.json` list. Never deletes. The last ruleset of the vault is not archived (`invalid_argument`); a name already in the archive is `conflict`. `inverse`: `restore_ruleset`. |
 | `restore_ruleset` | `name` | Moves `archive/rulesets/<name>` back and lists it again. `inverse`: `archive_ruleset`. |

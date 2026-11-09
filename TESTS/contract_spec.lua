@@ -555,6 +555,16 @@ describe("rules-export/1 golden files", function()
     expect_golden("result", (api.call("ops", request, opts)))
   end)
 
+  it("match the views document and a view_save (a vault with one view, a fixed day)", function()
+    local vault = tmp_dir()
+    write_raw(vault .. "/rulesets/alpha/_rules/DEP/DEP-01.md", RULE_FILE)
+    local opts = { vault = vault, today = "2026-01-01" }
+    local view = '{"title":"By severity","display":"columns","group_by":"severity","select":{"families":["DEP"]}}'
+    local request = '{"client_op_id":"c-3","ops":[{"op":"view_save","view":' .. view .. "}]}"
+    expect_golden("result_view_save", (api.call("ops", request, opts)))
+    expect_golden("views", (api.call("views", nil, opts)))
+  end)
+
   it("match the waivers document and a waive dry run (a project with a waivers file, a fixed day)", function()
     local root, opts = fixture()
     local project = tmp_dir()

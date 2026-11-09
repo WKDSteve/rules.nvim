@@ -541,8 +541,19 @@ end
 function M.hello(opts)
   local doc = d.head(d.kind("hello"), M.root_of(opts))
   doc.schemas = json.array({ M.SCHEMA })
-  doc.capabilities =
-    json.array({ "hello", "snapshot", "list", "rule", "next_id", "sources", "waivers", "rulesets", "groupings", "ops" })
+  doc.capabilities = json.array({
+    "hello",
+    "snapshot",
+    "list",
+    "rule",
+    "next_id",
+    "sources",
+    "waivers",
+    "rulesets",
+    "groupings",
+    "views",
+    "ops",
+  })
   doc.limits = json.object({
     list_items = M.MAX_LIST_ITEMS,
     request_bytes = 256 * 1024,
@@ -562,6 +573,8 @@ function M.hello(opts)
     "create_ruleset",
     "archive_ruleset",
     "restore_ruleset",
+    "view_save",
+    "view_delete",
   })
   return doc
 end
@@ -679,6 +692,56 @@ function M.groupings(opts)
   end
   local doc = new_doc(view, "groupings")
   doc.fields = json.array(fields)
+  return d.seal(doc, d.rev_of(lines)), nil
+end
+
+---One view as the document has it.
+---@param view table
+---@return table
+local function view_entry(view)
+  local select = {}
+  for _, s in ipairs(require("rules.views").SELECT) do
+    select[s.name] = json.array(vim.deepcopy(view.select[s.name]))
+  end
+  select.query = view.select.query
+  return json.object({
+    id = view.id,
+    title = view.title,
+    display = view.display,
+    group_by = view.group_by,
+    group_by2 = view.group_by2,
+    collapsed = json.array(vim.deepcopy(view.collapsed)),
+    select = json.object(select),
+    etag = view.etag,
+    created = view.created,
+    updated = view.updated,
+  })
+end
+
+---`rules.views`: the saved views of the vault (`<vault>/views/<slug>.md`), sorted by id, each with its selection, the
+---field it groups by (and for a matrix a second one), how it is drawn, the folded groups and the `etag` of its file. A
+---file that cannot be read as a view is no view but a line of `problems` (id, the file in the vault, why). The `rev` is
+---that of the views, not of the rules.
+---@param opts Rules.Contract.Opts|nil
+---@return table|nil doc
+---@return Lib.Contract.Error|nil err
+function M.views(opts)
+  local root, why = require("rules.vault").root({ vault = opts and opts.vault, project = opts and opts.project })
+  if not root then
+    return nil, errors.fail("not_found", why or "no vault is configured: the views live in the vault")
+  end
+  local list, problems, lines = require("rules.views").all(root)
+  local doc = d.head(d.kind("views"), root)
+  local items = {}
+  for _, view in ipairs(list) do
+    items[#items + 1] = view_entry(view)
+  end
+  local probs = {}
+  for _, p in ipairs(problems) do
+    probs[#probs + 1] = json.object({ id = p.id, file = p.file, message = d.redact(root, p.message) })
+  end
+  doc.views = json.array(items)
+  doc.problems = json.array(probs)
   return d.seal(doc, d.rev_of(lines)), nil
 end
 

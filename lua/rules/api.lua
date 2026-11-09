@@ -80,6 +80,12 @@ local api = api_mod.make({
         return contract.groupings(opts)
       end,
     },
+    views = {
+      params = {},
+      run = function(_, opts)
+        return contract.views(opts)
+      end,
+    },
     ops = require("rules.ops").method(),
   },
 })

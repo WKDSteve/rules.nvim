@@ -260,6 +260,8 @@ without rulesets (the vault would give them) and `:RulesVault` still fail loudly
   that is an error that says how to get one. This is how a project picks its rulesets without a machine path in a
   file that lives in its repository.
 - `gates` and `agent` of the vault file are the lowest places: a project or `setup()` overrides them by name.
+- **`<vault>/views/`** holds the saved views of the rules (one Markdown file each, `rules.views`, written by
+  `view_save` and `view_delete`; see [CONTRACT.md](CONTRACT.md#views)). It is no ruleset and never loaded as one.
 
 `source` in the documents of `rules-export/1` stays the ruleset's folder name (`lua`, `native`), never a path of this
 machine. A vault with two rulesets yields the same documents as passing both folders explicitly.

@@ -1028,6 +1028,8 @@ describe("rules-export/1 waivers", function()
       "create_ruleset",
       "archive_ruleset",
       "restore_ruleset",
+      "view_save",
+      "view_delete",
     }, hello.ops)
   end)
 

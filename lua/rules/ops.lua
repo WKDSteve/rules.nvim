@@ -93,6 +93,7 @@ end
 ---@field owner table<table, string>     result entry -> the ruleset it changed
 
 local door
+local view_save, view_delete
 
 -- ── small helpers ───────────────────────────────────────────────────────────────
 
@@ -1378,6 +1379,100 @@ local function fields(...)
   return out
 end
 
+-- ── the saved views (`<vault>/views/<slug>.md`, `rules.views`) ─────────────────────────────
+
+---The vault the views live in, or the refusal that says there is none.
+---@param ctx Rules.OpsCtx
+---@return string|nil root
+---@return table|nil refusal
+local function views_root(ctx)
+  local root, why = require("rules.vault").root({ vault = ctx.opts.vault, project = ctx.opts.project })
+  if not root then
+    return nil, door.refuse("not_found", why or "no vault is configured: the views live in the vault")
+  end
+  return root, nil
+end
+
+---A refusal of the views module as an entry: the code it names, else a failure.
+---@param ctx Rules.OpsCtx
+---@param err string|nil
+---@param info table|nil
+---@return table
+local function view_refused(ctx, err, info)
+  local code = info and info.code
+  if code == "conflict" or code == "not_found" or code == "invalid_argument" or code == "forbidden" then
+    return door.refuse(code, err or code)
+  end
+  return door.failure(ctx.root, err or "the view could not be written", info)
+end
+
+---`view_save` { id?, view, if_match? }: make a view (no `id`, or an `id` that is free) or replace one, on the version
+---read. `inverse`: a `view_delete` of a view made, a `view_save` of the old view for a change.
+---@param op table
+---@param ctx Rules.OpsCtx
+---@return table
+view_save = function(op, ctx)
+  local root, none = views_root(ctx)
+  if not root then
+    return none
+  end
+  if op.view == nil then
+    return door.refuse("invalid_argument", "view_save needs view")
+  end
+  local views = require("rules.views")
+  local res, err, info = views.save(root, op.view, { id = op.id, if_match = op.if_match, today = ctx.today, dry_run = ctx.dry })
+  if not res then
+    return view_refused(ctx, err, info)
+  end
+  local entry = { ok = true, id = res.id, changed_ids = {}, etag_before = res.etag_before }
+  if ctx.dry then
+    entry.outcome = res.created and "would_create" or (res.changed and "would_change" or "unchanged")
+    return entry
+  end
+  entry.etag_after = res.etag_after
+  if res.created then
+    entry.outcome = "created"
+    entry.inverse = json.object({ op = "view_delete", id = res.id, if_match = res.etag_after })
+  elseif res.changed then
+    entry.outcome = "changed"
+    if res.before then
+      entry.inverse = json.object({ op = "view_save", id = res.id, view = res.before, if_match = res.etag_after })
+    end
+  else
+    entry.outcome = "unchanged"
+  end
+  return entry
+end
+
+---`view_delete` { id, if_match }: delete a view, on the version read (`if_match` is required: a view is shared by every
+---machine of the vault). `inverse`: a `view_save` that makes it again.
+---@param op table
+---@param ctx Rules.OpsCtx
+---@return table
+view_delete = function(op, ctx)
+  if op.id == nil or op.if_match == nil then
+    return door.refuse("invalid_argument", "view_delete needs id and if_match")
+  end
+  local root, none = views_root(ctx)
+  if not root then
+    return none
+  end
+  local res, err, info = require("rules.views").delete(root, op.id, { if_match = op.if_match, dry_run = ctx.dry })
+  if not res then
+    return view_refused(ctx, err, info)
+  end
+  local entry = { ok = true, id = res.id, changed_ids = {}, etag_before = res.etag_before }
+  if ctx.dry then
+    entry.outcome = "would_delete"
+    return entry
+  end
+  entry.outcome = "deleted"
+  if res.before then
+    entry.inverse = json.object({ op = "view_save", id = res.id, view = res.before })
+  end
+  return entry
+end
+
 door = ops_lib.make({
   doc = contract.doc,
   order = {
@@ -1392,9 +1487,23 @@ door = ops_lib.make({
     "create_ruleset",
     "archive_ruleset",
     "restore_ruleset",
+    "view_save",
+    "view_delete",
   },
   types = wops.TYPES,
   ops = {
+    view_save = {
+      fields = { id = "string", view = "object", if_match = "string" },
+      run = function(op, ctx)
+        return view_save(op, ctx)
+      end,
+    },
+    view_delete = {
+      fields = { id = "string", if_match = "string" },
+      run = function(op, ctx)
+        return view_delete(op, ctx)
+      end,
+    },
     create_ruleset = {
       fields = { name = "string" },
       run = function(op, ctx)
