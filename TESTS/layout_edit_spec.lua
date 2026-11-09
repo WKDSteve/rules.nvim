@@ -97,6 +97,36 @@ describe("layout_edit: what is a heading and a token", function()
   end)
 end)
 
+describe("layout_edit: the sections of a layout and where each rule stands", function()
+  it("names the headings in their order once each, and the section of every token the editor sees", function()
+    local text = doc({
+      "---",
+      "kind: layout",
+      "## not a heading in the frontmatter",
+      "---",
+      "{{rule TOP-01}}",
+      "",
+      "## A",
+      "{{rule A-01}}",
+      "### A.1",
+      "{{rule A-02}}",
+      "```",
+      "{{rule HID-01}}",
+      "```",
+      "## B",
+      "## A",
+      "{{rule A-03}}",
+    })
+    local got = layout_edit.placements(text)
+    assert.same({ "A", "A.1", "B" }, got.sections)
+    assert.same({ ["TOP-01"] = "", ["A-01"] = "A", ["A-02"] = "A.1", ["A-03"] = "A" }, got.of)
+  end)
+
+  it("is empty for a layout without headings or tokens", function()
+    assert.same({ sections = {}, of = {} }, layout_edit.placements(doc({ "Only text." })))
+  end)
+end)
+
 describe("layout_edit: the start of a section", function()
   it("is in front of the first token of the section's own text, not of one in a subsection", function()
     local text = doc({ "## A", "", "Intro.", "", "### Sub", "", "{{rule GO-01}}", "", "## B", "" })

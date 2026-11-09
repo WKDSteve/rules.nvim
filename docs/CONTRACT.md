@@ -82,6 +82,7 @@ left out. At most 256 KiB.
 | `sources` | none | `rules.sources`: the files, each with its `etag`. |
 | `waivers` | `project` | `rules.waivers`: the waivers of a project, each with `expired` and `known`, see [Waivers](#waivers). |
 | `rulesets` | none | `rules.rulesets`: the loaded rulesets (`name`, `folder`, `in_vault`; an empty one too) and the `archived` folder names of the vault, see [Rulesets](#rulesets). No path. |
+| `groupings` | none | `rules.groupings`: the fields a view of the rules groups by, their values in order and how a drag between two groups is written (`mode`), one field per layout with the section of each of its rules, see [Groupings](#groupings). |
 | `ops` | `client_op_id`, `dry_run`, `ops` (flat: the fields are the request's own) | `rules.result`: one entry per operation, see [rules-ops/1](#rules-ops1-write). |
 
 ### `etag` and `etag_scope`
@@ -91,6 +92,27 @@ digits of its bytes): what a later write compares against. `etag_scope = "rule"`
 means the rule is a file of its own (the one-file-per-rule form, the only one
 `rules-ops/1` writes); `"file"` means a document that holds rules, where a
 change to the document changes the etag of every rule in it.
+
+### Groupings
+
+`rules.groupings` is what a client needs to show the rules in groups (columns, a list of sections, a matrix of two
+fields) and to turn a drag from one group to another into an operation, without knowing a field itself (the same form
+as `tasks.groupings` of tasks.nvim). Each entry of `fields` has `field`, `values` (in their order; a value no rule has
+yet is named too, a group with no rule is a place to drop), `truncated` (at most 200 values), `writable` and, when it
+is written, `mode`:
+
+| `field` | values | `mode` | a drag onto a group |
+| --- | --- | --- | --- |
+| `family` | the families that have rules, sorted | none | read only: the family is part of the id |
+| `severity` | `critical`, `recommended`, `nice-to-have` | `set` | `set` with `patch.severity` |
+| `status` | `active` (a rule of `snapshot.rules`), `retired` (one of `snapshot.retired`) | `retire` | onto `retired`: `retire`; back onto `active`: `reinstate` |
+| `waiver` | `active`, `expired` | none | read only: the client reads it from `rules.waivers` |
+| `layout` | the headings of one layout, each text once, in their order | `move` | `move` with the place `{ section, layout }` |
+
+There is one `layout` field for each layout of each ruleset, with `ruleset` (the name it goes by) and `layout` (the
+`output` path, what a place names), sorted by both. `members` says the section each loaded rule of the layout stands in
+(`""` above every heading); a rule that is not among them is not in that layout. A token of a rule that is not loaded is
+no member. The `rev` covers the rule files and the layouts, so a `move` (which changes only a layout) is a new state.
 
 ### `editable`
 

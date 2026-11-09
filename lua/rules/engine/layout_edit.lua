@@ -557,4 +557,30 @@ function M.where(text, id)
   return gap and vim.tbl_extend("force", cands[1], { gap = gap }) or cands[1]
 end
 
+---The sections of a layout and the section each rule stands in, in one pass: `sections` are the heading texts in the
+---order they come (each text once; a second heading of the same text is the same group), `of` maps the id of every
+---token the editor sees to the text of the heading above it ("" for a token above every heading). A token hidden in a
+---fence or a comment is not placed (the editor does not see it).
+---@param text string
+---@return { sections: string[], of: table<string, string> }
+function M.placements(text)
+  local lines = split(text)
+  local idx = index(lines)
+  local sections, seen, of = {}, {}, {}
+  local current = ""
+  for i = 1, #lines do
+    local mark = idx.heading[i]
+    if mark then
+      current = mark[2]
+      if not seen[current] then
+        seen[current] = true
+        sections[#sections + 1] = current
+      end
+    elseif idx.token[i] and of[idx.token[i]] == nil then
+      of[idx.token[i]] = current
+    end
+  end
+  return { sections = sections, of = of }
+end
+
 return M

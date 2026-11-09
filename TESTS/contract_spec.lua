@@ -104,6 +104,51 @@ describe("rules.api", function()
     contract.clock, contract.engine_info = saved_clock, saved_engine
   end)
 
+  it("groupings names the fields, their values in order, how each is written, and the section of each rule per layout", function()
+    local root, opts = fixture()
+    local layout = root .. "/_layouts/DEP.md"
+    write_raw(
+      layout,
+      table.concat(
+        { "---", "kind: layout", "output: regeln/DEP.md", "---", "## A", "{{rule DEP-01}}", "## B", "{{rule GONE-01}}", "" },
+        "\n"
+      )
+    )
+    local doc, code = call("groupings", nil, opts)
+    assert.is_nil(code)
+    assert.are.equal("rules.groupings", doc.kind)
+    local by = {}
+    for _, f in ipairs(doc.fields) do
+      by[f.field] = f
+    end
+    assert.are.same({ "DEP", "ERR", "LUA" }, by.family.values)
+    assert.is_false(by.family.writable)
+    assert.is_nil(by.family.mode)
+    assert.are.same({ "critical", "recommended", "nice-to-have" }, by.severity.values)
+    assert.are.equal("set", by.severity.mode)
+    assert.are.same({ "active", "retired" }, by.status.values)
+    assert.are.equal("retire", by.status.mode)
+    assert.is_false(by.waiver.writable)
+    -- one field per layout: its headings, and the section of every loaded rule in it (a token of no rule is none)
+    assert.are.equal("Checklists", by.layout.ruleset)
+    assert.are.equal("regeln/DEP.md", by.layout.layout)
+    assert.are.same({ "A", "B" }, by.layout.values)
+    assert.are.equal("move", by.layout.mode)
+    assert.are.same({ { id = "DEP-01", value = "A" } }, by.layout.members)
+    -- a change of the layout alone (a move) is a new state of the document
+    write_raw(
+      layout,
+      table.concat({ "---", "kind: layout", "output: regeln/DEP.md", "---", "## A", "## B", "{{rule DEP-01}}", "" }, "\n")
+    )
+    local again = call("groupings", nil, opts)
+    assert.are_not.equal(doc.rev, again.rev)
+    for _, f in ipairs(again.fields) do
+      if f.field == "layout" then
+        assert.are.same({ { id = "DEP-01", value = "B" } }, f.members)
+      end
+    end
+  end)
+
   it("hello names the schema, the methods and the limits, and reads no rule", function()
     local doc, code = call("hello", nil, { rulesets = {} })
     assert.is_nil(code)
@@ -503,6 +548,7 @@ describe("rules-export/1 golden files", function()
     expect_golden("next_id", (api.call("next_id", '{"params":{"family":"DEP"}}', opts)))
     expect_golden("sources", (api.call("sources", nil, opts)))
     expect_golden("rulesets", (api.call("rulesets", nil, opts)))
+    expect_golden("groupings", (api.call("groupings", nil, opts)))
     expect_golden("error", (api.call("rule", '{"params":{"id":"NOPE-1"}}', opts)))
     local request =
       '{"client_op_id":"c-1","dry_run":true,"ops":[{"op":"new","family":"DEP","title":"golden","severity":"critical"}]}'

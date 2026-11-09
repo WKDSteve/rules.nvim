@@ -74,6 +74,12 @@ local api = api_mod.make({
         return contract.ruleset_list(opts)
       end,
     },
+    groupings = {
+      params = {},
+      run = function(_, opts)
+        return contract.groupings(opts)
+      end,
+    },
     ops = require("rules.ops").method(),
   },
 })

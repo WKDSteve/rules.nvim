@@ -5,7 +5,7 @@
  *
  * Every document rules.nvim hands to a machine (read only). One of the kinds below, told apart by `kind`. A reader ignores fields it does not know: inside one version the contract only grows. The golden files next to this schema are the documents the engine writes.
  */
-export type RulesExport = Hello | Snapshot | List | Rule | NextId | Sources | Waivers | Rulesets | Result | Error;
+export type RulesExport = Hello | Snapshot | List | Rule | NextId | Sources | Waivers | Rulesets | Groupings | Result | Error;
 
 /**
  * rules.error: what went wrong, in a code that is stable.
@@ -15,6 +15,49 @@ export type Error = Head & {
   kind: "rules.error";
   message: string;
   retryable: boolean;
+};
+
+/**
+ * rules.groupings: the fields a view of the rules can group by, the values of each in their order, and how a drag between two groups is written (mode). One field per layout of a ruleset (field layout), with the section each of its rules stands in (members).
+ */
+export type Groupings = Head & {
+  digest: unknown;
+  fields: {
+    /**
+     * family: part of the id, read only; status: active (a loaded rule) or retired (one of snapshot.retired); waiver: active or expired, read from rules.waivers by the client; layout: the section of one layout
+     */
+    field: "family" | "severity" | "status" | "waiver" | "layout";
+    /**
+     * field layout: the output path of the layout, what a place names
+     */
+    layout?: string;
+    /**
+     * field layout: the section each loaded rule of the layout stands in, by id; "" above every heading. A rule not in it is not in the layout.
+     */
+    members?: {
+      id: string;
+      value: string;
+    }[];
+    /**
+     * set: one set of the field; retire: retire into retired, reinstate out of it; move: the move of the rule's token into the section (a place with section and layout)
+     */
+    mode?: "set" | "retire" | "move";
+    /**
+     * field layout: the name the ruleset goes by
+     */
+    ruleset?: string;
+    /**
+     * more values than the engine names (at most 200)
+     */
+    truncated: boolean;
+    /**
+     * the values in their order; for a layout its headings, each text once
+     */
+    values: string[];
+    writable: boolean;
+  }[];
+  kind: "rules.groupings";
+  rev: unknown;
 };
 
 export type Head = {

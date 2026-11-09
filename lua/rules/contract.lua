@@ -25,6 +25,7 @@ local expand_path = require("lib.nvim.cross.fs.expand_path")
 local doc_mod = require("lib.nvim.contract.doc")
 
 local gaps = require("rules.engine.gaps")
+local layout_edit = require("rules.engine.layout_edit")
 local loader = require("rules.engine.loader")
 local parser = require("rules.engine.parser")
 
@@ -39,6 +40,9 @@ M.MAX_LIST_ITEMS = 500
 M.DEFAULT_LIST_ITEMS = 100
 
 M.SEVERITIES = { "critical", "recommended", "nice-to-have" }
+
+---The most values one field of `groupings` names (the sections of a layout); `truncated` says there were more.
+M.MAX_GROUP_VALUES = 200
 
 local plugin_root =
   vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(vim.fs.normalize(vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p")))))
@@ -537,7 +541,8 @@ end
 function M.hello(opts)
   local doc = d.head(d.kind("hello"), M.root_of(opts))
   doc.schemas = json.array({ M.SCHEMA })
-  doc.capabilities = json.array({ "hello", "snapshot", "list", "rule", "next_id", "sources", "waivers", "rulesets", "ops" })
+  doc.capabilities =
+    json.array({ "hello", "snapshot", "list", "rule", "next_id", "sources", "waivers", "rulesets", "groupings", "ops" })
   doc.limits = json.object({
     list_items = M.MAX_LIST_ITEMS,
     request_bytes = 256 * 1024,
@@ -580,6 +585,101 @@ function M.snapshot(opts)
   doc.retired = json.array(view.retired)
   doc.load_errors = json.array(view.load_errors)
   return d.seal(doc, view.rev), nil
+end
+
+---@param values string[]
+---@return string[] values
+---@return boolean truncated
+local function capped(values)
+  if #values <= M.MAX_GROUP_VALUES then
+    return values, false
+  end
+  return vim.list_slice(values, 1, M.MAX_GROUP_VALUES), true
+end
+
+---`rules.groupings`: the fields a view of the rules can group by, the values of each in their order, and how a drag
+---from one group to another is written (`mode`): `severity` with `set`, `status` (a loaded rule is `active`, one of
+---`snapshot.retired` is `retired`) with `retire` and `reinstate`, the section of a layout with `move` (one field per
+---layout; `members` says the section each of its rules stands in, "" above every heading). `family` (it is part of the
+---id) and `waiver` (a client reads it from `rules.waivers`: `active` or `expired`) are read only. The values of a field
+---the rules can have but none does yet are named too: a group with no rule is a place to drop.
+---@param opts Rules.Contract.Opts|nil
+---@return table|nil doc
+---@return Lib.Contract.Error|nil err
+function M.groupings(opts)
+  local view, err = M.view(opts)
+  if not view then
+    return nil, err
+  end
+  local families = {}
+  for _, fam in ipairs(families_of(view)) do
+    families[#families + 1] = fam.family
+  end
+  local fields = {
+    json.object({ field = "family", values = json.array(families), truncated = false, writable = false }),
+    json.object({
+      field = "severity",
+      values = json.array(vim.deepcopy(M.SEVERITIES)),
+      truncated = false,
+      writable = true,
+      mode = "set",
+    }),
+    json.object({
+      field = "status",
+      values = json.array({ "active", "retired" }),
+      truncated = false,
+      writable = true,
+      mode = "retire",
+    }),
+    json.object({ field = "waiver", values = json.array({ "active", "expired" }), truncated = false, writable = false }),
+  }
+  -- the layouts of every ruleset, by the name the ruleset goes by and the output each layout is the order of
+  local ops = require("rules.ops")
+  local loaded = {}
+  for _, rule in ipairs(view.rules) do
+    loaded[rule.id] = true
+  end
+  local lines = { view.rev }
+  local layouts = {}
+  for _, root in ipairs(view.paths) do
+    for _, layout in ipairs(ops.layouts(root)) do
+      layouts[#layouts + 1] = { ruleset = view.names[root], layout = layout }
+    end
+  end
+  table.sort(layouts, function(a, b)
+    if a.ruleset ~= b.ruleset then
+      return json.bytes_less(a.ruleset, b.ruleset)
+    end
+    return json.bytes_less(a.layout.output, b.layout.output)
+  end)
+  for _, entry in ipairs(layouts) do
+    local placed = layout_edit.placements(entry.layout.text)
+    local values, truncated = capped(placed.sections)
+    local members = {}
+    for id, section in pairs(placed.of) do
+      -- a token of a rule that is not loaded (a typo, a retired rule) is no member: there is no rule to drag
+      if loaded[id] then
+        members[#members + 1] = json.object({ id = id, value = section })
+      end
+    end
+    table.sort(members, function(a, b)
+      return json.bytes_less(a.id, b.id)
+    end)
+    fields[#fields + 1] = json.object({
+      field = "layout",
+      ruleset = entry.ruleset,
+      layout = entry.layout.output,
+      values = json.array(values),
+      truncated = truncated,
+      writable = true,
+      mode = "move",
+      members = json.array(members),
+    })
+    lines[#lines + 1] = entry.ruleset .. "	" .. entry.layout.output .. "	" .. etag.of(entry.layout.text)
+  end
+  local doc = new_doc(view, "groupings")
+  doc.fields = json.array(fields)
+  return d.seal(doc, d.rev_of(lines)), nil
 end
 
 ---`rules.list`: a page of rules, optionally of one family or severity.
