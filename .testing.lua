@@ -11,6 +11,10 @@ return {
   -- between spec files.
   isolated = "file",
   host = "c",
+  -- The git specs (vault_behind, vault_ci_checkout, contract's scripts/rules.lua) spawn a dozen processes per
+  -- case: the defaults of 10 s per case and 60 s per file are reached on the Windows leg under load
+  -- (cdfbe8c, 2026-11-09, both attempts).
+  timeouts = { case_ms = 30000, file_ms = 300000 },
   -- TESTS/vault_ci_spec.lua: the opt-in run against the real rulesets names its two folders in these variables.
   env_allow = { "RULES_REAL_LUA", "RULES_REAL_NATIVE", "RULES_REAL_GO" },
   -- Guards (docs/GUARDS.md of testing.nvim). The suite is clean for these, so they raise errors.
