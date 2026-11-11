@@ -39,7 +39,7 @@ M.PART_DESC = {
 }
 
 ---Paths that differ only in case are one folder on Windows and (by default) on macOS.
-M.CASE_BLIND = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+M.CASE_BLIND = require("lib.nvim.cross.platform.case_blind")()
 
 ---@param word any
 ---@return boolean

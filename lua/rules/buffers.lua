@@ -19,7 +19,7 @@
 
 local M = {}
 
-local CASE_INSENSITIVE = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CASE_INSENSITIVE = require("lib.nvim.cross.platform.case_blind")()
 
 ---The real path of a file or folder, or, when it does not exist (yet), the real path of its nearest folder that does,
 ---with the rest of the name behind it: a buffer of a rule file that the write is about to make must be found under

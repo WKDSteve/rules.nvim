@@ -43,7 +43,7 @@ M.DEFAULT_LAYOUTS_DIR = "_layouts"
 local uv = vim.uv or vim.loop
 
 --- Paths that differ only in case are one file on Windows and (by default) on macOS.
-local CASE_INSENSITIVE = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CASE_INSENSITIVE = require("lib.nvim.cross.platform.case_blind")()
 
 --- The longest id echoed in a message.
 local SHOWN_BYTES = 100

@@ -255,7 +255,7 @@ local function is_dir(path)
 end
 
 ---Paths that differ only in case are one folder on Windows and (by default) on macOS.
-local CASE_BLIND = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CASE_BLIND = require("lib.nvim.cross.platform.case_blind")()
 
 ---A path as a key to compare by: the real path (a link, a Windows short name, `/var` against `/private/var`), one
 ---spelling of the separators, no trailing slash, one case where the file system folds it.

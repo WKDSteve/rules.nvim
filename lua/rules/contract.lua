@@ -89,7 +89,7 @@ M.doc = d
 ---@field today? string                 the date waivers are judged against (`YYYY-MM-DD`); default today
 
 ---Paths that differ only in case are one folder on Windows and (by default) on macOS.
-local CASE_INSENSITIVE = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CASE_INSENSITIVE = require("lib.nvim.cross.platform.case_blind")()
 
 ---What the call asked for and `setup()`, the project file and the vault say, ranked (`rules.settings`). The warnings are
 ---shown once each.

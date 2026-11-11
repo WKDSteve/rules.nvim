@@ -23,7 +23,7 @@ local M = {}
 --- What makes a folder a project of its own.
 M.MARKERS = { ".rules-waivers.json", ".rules.json", ".git" }
 
-local CASE_INSENSITIVE = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CASE_INSENSITIVE = require("lib.nvim.cross.platform.case_blind")()
 
 ---@param path string
 ---@return string|nil real  with `/`, no trailing slash

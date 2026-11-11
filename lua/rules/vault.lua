@@ -112,12 +112,7 @@ end
 ---@param b string
 ---@return boolean
 local function same_folder(a, b)
-  local normkey = require("lib.nvim.fs.normkey")
-  local x, y = normkey(a), normkey(b)
-  if vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1 then
-    x, y = x:lower(), y:lower()
-  end
-  return x == y
+  return require("lib.nvim.fs.same_path")(a, b, { realpath = true })
 end
 
 ---Whether `root` is a git repository and has nothing to commit. Read only: `git rev-parse --show-toplevel` and

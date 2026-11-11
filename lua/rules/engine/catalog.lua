@@ -437,7 +437,7 @@ local function read_file(path)
 end
 
 --- Paths that differ only in case are one file on Windows and (by default) on macOS.
-local CASE_INSENSITIVE = vim.fn.has("win32") == 1 or vim.fn.has("mac") == 1
+local CASE_INSENSITIVE = require("lib.nvim.cross.platform.case_blind")()
 
 --- A key under which two spellings of one path are equal: normalized, and case-folded where the file system is.
 ---@param path string
