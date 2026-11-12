@@ -43,6 +43,14 @@ describe("rules.engine.agent.validate a proposal", function()
     assert.are.equal("hidden dependency", result.findings[1].why)
   end)
 
+  it("carries the files the request carried, normalised, for the verdict store to check evidence against", function()
+    local root = tree()
+
+    local result = validate.validate(RULE, answer({ violation() }), root, { sent = { "lua\\a.lua", "lua/b.lua" } })
+
+    assert.are.same({ "lua/a.lua", "lua/b.lua" }, result.sent)
+  end)
+
   it("is a proposal, never a verdict: proposed, not verified, and no field that could read as a pass", function()
     local root, sent = tree()
 

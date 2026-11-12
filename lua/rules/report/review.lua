@@ -104,6 +104,17 @@ function M.by()
   return nil
 end
 
+--- The commit the tree is at, or nil outside a repository (then the verdict is kept without one).
+---@param root string
+---@return string|nil
+local function head_commit(root)
+  local ok, done = pcall(function()
+    return vim.system({ "git", "-C", root, "rev-parse", "HEAD" }, { text = true }):wait(3000)
+  end)
+  local sha = ok and done.code == 0 and vim.trim(done.stdout or "") or nil
+  return sha and sha:match("^%x+$") and sha or nil
+end
+
 ---@param root string
 ---@param proposal Rules.Agent.Proposal
 ---@param opts? { by?: string, model?: string }
@@ -115,7 +126,11 @@ function M.accept(root, proposal, opts)
     notify.error("who accepts? set vim.g.rules_by to your name (the verdict records it)")
     return false
   end
-  local ok, err = require("rules.engine.verdicts").accept(root, proposal.result, { by = by, model = proposal.model })
+  local ok, err = require("rules.engine.verdicts").accept(
+    root,
+    proposal.result,
+    { by = by, model = proposal.model, commit = head_commit(root) }
+  )
   if not ok then
     notify.error(("%s was not accepted: %s"):format(proposal.rule.id, err))
     return false

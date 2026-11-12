@@ -4,6 +4,11 @@ local verdicts = require("rules.engine.verdicts")
 local function tmp_root()
   local dir = vim.fn.tempname()
   vim.fn.mkdir(dir, "p")
+  -- the files the proposals below name: evidence is checked against the tree
+  vim.fn.mkdir(dir .. "/lua", "p")
+  for _, name in ipairs({ "lua/a.lua", "lua/b.lua", "x.lua" }) do
+    vim.fn.writefile({ "x" }, dir .. "/" .. name)
+  end
   return dir
 end
 
@@ -17,6 +22,7 @@ local function proposal(extra)
     verified = false,
     findings = { { file = "lua/a.lua", line = 12, quote = "require('x')" } },
     checked = { "lua/a.lua", "lua/b.lua" },
+    sent = { "lua/a.lua", "lua/b.lua", "x.lua" },
     unchecked = {},
     dropped = {},
   }, extra or {})
@@ -45,6 +51,7 @@ describe("rules.engine.verdicts.accept", function()
       by = "Stefan",
       evidence = { { file = "lua/a.lua", line = 12 } },
       note = "seen it",
+      scope = verdicts.scope_of({ "lua/a.lua", "lua/b.lua", "x.lua" }),
       from_proposal = { status = "violation", model = "m1" },
     }, loaded["DEP-01"])
   end)
@@ -332,9 +339,11 @@ describe("rules.engine.verdicts review follow-ups", function()
     local checked = {}
     for n = 1, 60 do
       checked[n] = ("lua/f%02d.lua"):format(n)
+      vim.fn.writefile({ "x" }, root .. "/" .. checked[n])
     end
 
-    local ok, err = verdicts.accept(root, proposal({ status = "compliant", findings = {}, checked = checked }), ACCEPT)
+    local ok, err =
+      verdicts.accept(root, proposal({ status = "compliant", findings = {}, checked = checked, sent = checked }), ACCEPT)
     local entry = verdicts.load(root)["DEP-01"]
 
     assert.is_true(ok, err)
@@ -397,5 +406,82 @@ describe("rules.engine.verdicts review follow-ups", function()
     local loaded = verdicts.load(root)
     assert.is_truthy(loaded["B-01"])
     assert.is_nil(loaded["C-01"])
+  end)
+end)
+
+describe("rules.engine.verdicts hardening", function()
+  it("refuses evidence the request did not carry (a host that builds the proposal by hand)", function()
+    local root = tmp_root()
+    vim.fn.writefile({ "x" }, root .. "/other.lua")
+
+    local ok, err = verdicts.accept(root, proposal(), vim.tbl_extend("force", ACCEPT, { evidence = { { file = "other.lua" } } }))
+
+    assert.is_false(ok)
+    assert.is_truthy(err:find("was not sent", 1, true))
+    assert.is_nil(verdicts.load(root)["DEP-01"])
+  end)
+
+  it("refuses evidence that is not a file in the tree", function()
+    local root = tmp_root()
+    vim.fn.delete(root .. "/lua/a.lua")
+
+    local ok, err = verdicts.accept(root, proposal(), ACCEPT)
+
+    assert.is_false(ok)
+    assert.is_truthy(err:find("not a file in the tree", 1, true))
+  end)
+
+  it("refuses a proposal that carries no list of what was sent", function()
+    local root = tmp_root()
+
+    local ok, err = verdicts.accept(root, proposal({ sent = vim.NIL }), ACCEPT)
+
+    assert.is_false(ok)
+    assert.is_truthy(err:find("no list of the files", 1, true))
+  end)
+
+  it("keeps the commit given by the caller and refuses one that is not a commit id", function()
+    local root = tmp_root()
+
+    assert.is_true(
+      verdicts.accept(root, proposal(), vim.tbl_extend("force", ACCEPT, { commit = "0123456789abcdef0123456789abcdef01234567" }))
+    )
+    assert.are.equal("0123456789abcdef0123456789abcdef01234567", verdicts.load(root)["DEP-01"].commit)
+    local ok = verdicts.accept(root, proposal({ rule_id = "B-01" }), vim.tbl_extend("force", ACCEPT, { commit = "not-a-hash" }))
+    assert.is_false(ok)
+  end)
+
+  it("marks a verdict stale when the scope differs from the accepted request, whatever the day", function()
+    local entries = {
+      ["DEP-01"] = {
+        verdict = "compliant",
+        date = "2026-10-22",
+        by = "S",
+        evidence = {},
+        scope = verdicts.scope_of({ "lua/a.lua", "lua/b.lua" }),
+      },
+    }
+
+    assert.are.same({}, verdicts.stale(entries, { scope = { ["DEP-01"] = { "lua/b.lua", "lua/a.lua" } } }))
+    local stale = verdicts.stale(entries, { scope = { ["DEP-01"] = { "lua/a.lua", "lua/b.lua", "lua/new.lua" } } })
+    assert.are.equal(1, #stale)
+    assert.is_truthy(stale[1].reasons[1]:find("scope changed (2 files then, 3 now)", 1, true))
+  end)
+
+  it("marks a verdict stale by commit: a change on the day of accepting is caught", function()
+    local entries = {
+      ["DEP-01"] = {
+        verdict = "compliant",
+        date = "2026-10-22",
+        by = "S",
+        evidence = { { file = "lua/a.lua" } },
+        commit = "0123456789abcdef",
+      },
+    }
+
+    assert.are.same({}, verdicts.stale(entries, { files = { ["lua/a.lua"] = "2026-10-22" } }))
+    local stale = verdicts.stale(entries, { since_commit = { ["DEP-01"] = { "lua/a.lua" } } })
+    assert.are.equal(1, #stale)
+    assert.is_truthy(stale[1].reasons[1]:find("lua/a.lua changed after commit 01234567", 1, true))
   end)
 end)

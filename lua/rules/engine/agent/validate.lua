@@ -340,6 +340,15 @@ end
 function M.validate(rule, text, root, opts)
   local result = judge(rule, text, root, opts)
   result.unchecked = unchecked_of(opts and opts.sent, result.checked)
+  -- The files the request carried travel with the proposal: the verdict store checks its evidence against them
+  if opts and is_list(opts.sent) then
+    result.sent = {}
+    for _, path in ipairs(opts.sent) do
+      if type(path) == "string" then
+        result.sent[#result.sent + 1] = norm_path(path)
+      end
+    end
+  end
   return result
 end
 

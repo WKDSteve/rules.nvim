@@ -132,14 +132,21 @@ bad path, a list instead of an object) is an error, never "no verdicts". `requir
   proposal that says `verified`. `by` comes from the caller, never from the proposal; the verdict is the
   proposal's `status`, a person who disagrees rejects and nothing is written (a file whose `from_proposal.status`
   differs from `verdict` is refused on load too). Evidence defaults to the findings (`file`, `line`) or the `checked`
-  files, at most 50; more are counted in `evidence_omitted`. A date after today is refused. An existing unusable
+  files, at most 50; more are counted in `evidence_omitted`. Evidence is checked against the tree: each file must be
+  one the request carried (`proposal.sent`) and a plain file under the root, and a proposal without a `sent` list is
+  refused, so a host cannot accept a hand-built proposal. The verdict also keeps `commit` (HEAD when accepted, from the
+  caller; the review window passes it) and `scope` (`count` and `hash` of the sorted list of files the request
+  carried). A date after today is refused. An existing unusable
   file or a link stops it, and so does a file another session changed between the read and the write.
 - `load(root)`, `parse(raw, label)`, `encode(entries)`: strict like the waivers file; sorted keys, LF.
 - `orphaned(entries, rules)`: verdicts of rules that no longer exist. `:checkhealth rules` has a section for a
   project that keeps a verdicts file.
 - `stale(entries, { files = { [path] = "YYYY-MM-DD" }, rules = { [id] = "YYYY-MM-DD" } })`: pure. A verdict is stale
   when the text of its rule, or a file of its evidence, changed after the day it was accepted. The caller fills the
-  days from the history (`git log -1 --format=%cs -- <path>`); the engine runs no git.
+  days from the history (`git log -1 --format=%cs -- <path>`); the engine runs no git. Two more inputs: `scope =
+  { [id] = files the rule's scope holds now }` marks a verdict stale when the list differs from the one accepted
+  (`scope changed`: a file added, or one that left), whatever the day; `since_commit = { [id] = paths }` (from
+  `git diff --name-only <commit>..HEAD`) marks it stale for a change after its `commit`, on the day of accepting too.
 
 A verdict changes nothing `:Rules check` or `:Rules gate` report, and never their exit code.
 

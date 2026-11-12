@@ -49,12 +49,15 @@ M.MAX_BY_LEN = 100
 ---@field evidence Rules.Verdict.Evidence[]  where the answer was found (may be empty)
 ---@field evidence_omitted? integer  how many more files the proposal named than `evidence` keeps (`M.MAX_EVIDENCE`)
 ---@field note? string
+---@field commit? string  the commit the tree was at when it was accepted (given by the caller; the engine runs no git)
+---@field scope? { count: integer, hash: string }  the files the request carried: how many, and the hash of the sorted list
 ---@field from_proposal? { status: "compliant"|"violation", model?: string }  what was accepted
 
 ---@alias Rules.Verdicts table<string, Rules.Verdict>
 
 local VERDICTS = { compliant = true, violation = true }
-local KEYS = { "by", "date", "evidence", "evidence_omitted", "from_proposal", "note", "verdict" }
+local KEYS = { "by", "commit", "date", "evidence", "evidence_omitted", "from_proposal", "note", "scope", "verdict" }
+local SCOPE_KEYS = { "count", "hash" }
 local EVIDENCE_KEYS = { "file", "line" }
 local PROPOSAL_KEYS = { "model", "status" }
 
@@ -181,6 +184,31 @@ function M.entry(id, value)
     entry.note = value.note
   end
 
+  if value.commit ~= nil then
+    if type(value.commit) ~= "string" or not value.commit:match("^%x+$") or #value.commit < 7 or #value.commit > 64 then
+      return nil, ("commit for %s must be a hexadecimal commit id of 7 to 64 characters"):format(id)
+    end
+    entry.commit = value.commit
+  end
+
+  if value.scope ~= nil then
+    local scope = value.scope
+    if type(scope) ~= "table" or scope == vim.NIL or vim.islist(scope) and #scope > 0 then
+      return nil, ("scope for %s must be an object"):format(id)
+    end
+    local bad_scope = unknown_key(scope, SCOPE_KEYS)
+    if bad_scope then
+      return nil, ("unknown key %q in scope for %s (keys: %s)"):format(bad_scope, id, table.concat(SCOPE_KEYS, ", "))
+    end
+    if type(scope.count) ~= "number" or scope.count % 1 ~= 0 or scope.count < 0 then
+      return nil, ("scope.count for %s must be a whole number of 0 or more"):format(id)
+    end
+    if type(scope.hash) ~= "string" or not scope.hash:match("^%x+$") or #scope.hash ~= 64 then
+      return nil, ("scope.hash for %s must be a SHA-256 in hexadecimal"):format(id)
+    end
+    entry.scope = { count = scope.count, hash = scope.hash }
+  end
+
   if value.from_proposal ~= nil then
     local origin = value.from_proposal
     if type(origin) ~= "table" or origin == vim.NIL or vim.islist(origin) and #origin > 0 then
@@ -290,6 +318,8 @@ function M.encode(entries)
       evidence = json.array(evidence),
       evidence_omitted = entry.evidence_omitted,
       note = entry.note,
+      commit = entry.commit,
+      scope = entry.scope and json.object({ count = entry.scope.count, hash = entry.scope.hash }) or nil,
       from_proposal = entry.from_proposal
           and json.object({ status = entry.from_proposal.status, model = entry.from_proposal.model })
         or nil,
@@ -319,6 +349,52 @@ end
 ---@field note? string
 ---@field evidence? Rules.Verdict.Evidence[]  default: the proposal's findings (file, line), or its `checked` files
 ---@field model? string  the model that made the proposal, kept as the origin
+---@field commit? string  the commit the tree is at (`git rev-parse HEAD`), kept so a later change can be told by commit
+
+---@param files string[]
+---@return string
+local function scope_hash(files)
+  local sorted = {}
+  for index, file in ipairs(files) do
+    sorted[index] = (tostring(file):gsub("\\", "/"))
+  end
+  table.sort(sorted)
+  return vim.fn.sha256(table.concat(sorted, "\n"))
+end
+
+--- The scope record of a list of files: how many, and the hash of the sorted list.
+---@param files string[]
+---@return { count: integer, hash: string }
+function M.scope_of(files)
+  return { count = #files, hash = scope_hash(files) }
+end
+
+--- Why the evidence cannot be accepted against this tree, or nil: each file must be one the request carried and
+--- exist in the tree as a plain file (not a link, not a folder). A host that builds a proposal by hand cannot name
+--- evidence that was never sent or does not exist.
+---@param root string
+---@param evidence Rules.Verdict.Evidence[]
+---@param sent string[]|nil
+---@return string|nil why
+local function evidence_tree_error(root, evidence, sent)
+  if type(sent) ~= "table" then
+    return "the proposal carries no list of the files that were sent: its evidence cannot be checked"
+  end
+  local sent_set = {}
+  for _, path in ipairs(sent) do
+    sent_set[(tostring(path):gsub("\\", "/"))] = true
+  end
+  for _, item in ipairs(evidence) do
+    if not sent_set[item.file] then
+      return ("evidence file %s was not sent with the request"):format(item.file)
+    end
+    local stat = vim.uv.fs_lstat(root .. "/" .. item.file)
+    if not stat or stat.type ~= "file" then
+      return ("evidence file %s is not a file in the tree"):format(item.file)
+    end
+  end
+  return nil
+end
 
 --- The evidence a proposal carries by itself, at most `M.MAX_EVIDENCE` entries.
 ---@param proposal table
@@ -352,10 +428,11 @@ end
 --- Turn one proposal into a verdict entry, without writing anything.
 ---@param proposal Rules.Agent.Result  from `engine/agent/validate`
 ---@param accept Rules.Verdict.Accept
+---@param root? string  when given, the evidence is checked against the tree and the files the request carried
 ---@return string|nil id
 ---@return Rules.Verdict|nil entry
 ---@return string|nil err
-function M.accepted(proposal, accept)
+function M.accepted(proposal, accept, root)
   if type(proposal) ~= "table" or (next(proposal) ~= nil and vim.islist(proposal)) then
     return nil, nil, "accept takes one proposal at a time"
   end
@@ -382,7 +459,15 @@ function M.accepted(proposal, accept)
   if not evidence then
     evidence, omitted = evidence_of(proposal)
   end
+  if root then
+    local tree_why = evidence_tree_error(root, evidence, proposal.sent)
+    if tree_why then
+      return nil, nil, tree_why
+    end
+  end
   local entry, why = M.entry(proposal.rule_id, {
+    commit = accept.commit,
+    scope = type(proposal.sent) == "table" and M.scope_of(proposal.sent) or nil,
     verdict = proposal.status,
     date = today,
     by = accept.by,
@@ -406,7 +491,7 @@ end
 ---@return boolean ok
 ---@return string|nil err
 function M.accept(root, proposal, accept)
-  local id, entry, err = M.accepted(proposal, accept)
+  local id, entry, err = M.accepted(proposal, accept, root)
   if not id then
     return false, err
   end
@@ -448,6 +533,9 @@ M.orphaned = waivers.orphaned
 ---@class Rules.Verdict.Changes
 ---@field files? table<string, string>  relative file -> the day it last changed (`YYYY-MM-DD`)
 ---@field rules? table<string, string>  rule id -> the day its text last changed
+---@field scope? table<string, string[]>  rule id -> the files its scope holds now (what `plan` would send today)
+---@field since_commit? table<string, string[]>  rule id -> the evidence files (or the rule's own file) that changed
+---  after the verdict's `commit` (`git diff --name-only <commit>..HEAD`): catches a change on the day of accepting
 
 ---@class Rules.Verdict.Stale
 ---@field id string
@@ -470,6 +558,16 @@ function M.stale(entries, changes)
       local day = files[item.file]
       if day and day > entry.date then
         reasons[#reasons + 1] = ("file %s changed %s"):format(item.file, day)
+      end
+    end
+    -- The scope now differs from the files the accepted request carried (a file added, or one that left)
+    local scope_now = (changes.scope or {})[id]
+    if entry.scope and scope_now and scope_hash(scope_now) ~= entry.scope.hash then
+      reasons[#reasons + 1] = ("scope changed (%d files then, %d now)"):format(entry.scope.count, #scope_now)
+    end
+    if entry.commit then
+      for _, path in ipairs((changes.since_commit or {})[id] or {}) do
+        reasons[#reasons + 1] = ("%s changed after commit %s"):format(path, entry.commit:sub(1, 8))
       end
     end
     if #reasons > 0 then
