@@ -1,8 +1,8 @@
 local window = require("rules.report.window")
 
 --- Close every tab except the first, leaving a clean slate between tests --
---- `window.open` creates real tabs/windows, plenary doesn't reset those
---- between `it` blocks the way it resets Lua module state.
+--- `window.open` creates real tabs/windows, and testing.nvim does not reset
+--- those between `it` blocks (one editor runs the whole file).
 local function close_extra_tabs()
   while vim.fn.tabpagenr("$") > 1 do
     vim.cmd("tabclose")

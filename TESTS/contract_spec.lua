@@ -523,6 +523,9 @@ describe("rules-export/1 golden files", function()
   )
   local dir = plugin_root .. "/schemas/rules-export/1/golden"
 
+  -- Rewriting the golden files (RULES_UPDATE_GOLDEN is in env_allow of .testing.lua, or a file `.update` in the
+  -- golden folder) writes into the repository, which the fs guard reports; the update run allows that folder:
+  --   RULES_UPDATE_GOLDEN=1 scripts/test.sh --file contract_spec --allow-fs=schemas/rules-export/1/golden
   ---@param name string
   ---@param text string
   local function expect_golden(name, text)
@@ -532,7 +535,10 @@ describe("rules-export/1 golden files", function()
     end
     local f = assert(
       io.open(path, "rb"),
-      "missing golden file " .. path .. " (create schemas/rules-export/1/golden/.update and rerun to write it)"
+      "missing golden file "
+        .. path
+        .. " (write it: RULES_UPDATE_GOLDEN=1 scripts/test.sh --file contract_spec"
+        .. " --allow-fs=schemas/rules-export/1/golden)"
     )
     local want = f:read("*a")
     f:close()

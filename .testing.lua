@@ -16,7 +16,8 @@ return {
   -- (cdfbe8c, 2026-11-09, both attempts).
   timeouts = { case_ms = 30000, file_ms = 300000 },
   -- TESTS/vault_ci_spec.lua: the opt-in run against the real rulesets names its two folders in these variables.
-  env_allow = { "RULES_REAL_LUA", "RULES_REAL_NATIVE", "RULES_REAL_GO" },
+  -- TESTS/contract_spec.lua: RULES_UPDATE_GOLDEN=1 rewrites the golden files of schemas/rules-export/1/golden.
+  env_allow = { "RULES_REAL_LUA", "RULES_REAL_NATIVE", "RULES_REAL_GO", "RULES_UPDATE_GOLDEN" },
   -- Guards (docs/GUARDS.md of testing.nvim). The suite is clean for these, so they raise errors.
   guards = {
     fs = "error",
