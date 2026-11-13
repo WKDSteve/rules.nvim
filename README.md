@@ -246,3 +246,20 @@ If you find this plugin useful, a star on GitHub supports its development.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- connections:begin (written by the app-icons tool of the workshop; change integrations.json there, not this block) -->
+## Connections
+
+![rules.nvim: what it uses and what uses it](assets/graphs/rules.nvim.png)
+
+**Uses**
+
+- [ai.nvim](https://github.com/WKDSteve/ai.nvim): The agent rules of rules.nvim ask ai.nvim (`ai.ask`) to judge a rule when no other transport is given. ([picture](assets/graphs/pair/rules.nvim--ai.nvim.png))
+- [lib.nvim](https://github.com/WKDSteve/lib.nvim): the shared base of the plugins.
+
+**Used by**
+
+- [rules-desktop](https://github.com/WKDSteve/rules-desktop): rules-desktop talks to rules.nvim as its engine (`rules-export/1`, `rules-ops/1`), pinned in `engine.lock`; the app never writes a rule itself. ([picture](assets/graphs/pair/rules-desktop--rules.nvim.png))
+- [tasks.nvim](https://github.com/WKDSteve/tasks.nvim): `import --from-rules` of tasks.nvim turns a work list of rules.nvim (`rules-work-list/1`) into tasks of an area. ([picture](assets/graphs/pair/tasks.nvim--rules.nvim.png))
+- [testing.nvim](https://github.com/WKDSteve/testing.nvim): The conformance step of testing.nvim checks a repository against a ruleset through rules.nvim (`rules_bridge`). ([picture](assets/graphs/pair/testing.nvim--rules.nvim.png))
+<!-- connections:end -->
