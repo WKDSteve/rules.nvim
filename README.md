@@ -255,10 +255,12 @@ MIT — see [LICENSE](LICENSE).
 **Uses**
 
 - [ai.nvim](https://github.com/WKDSteve/ai.nvim): The agent rules of rules.nvim ask ai.nvim (`ai.ask`) to judge a rule when no other transport is given. ([picture](assets/graphs/pair/rules.nvim--ai.nvim.png))
+- [pickers.nvim](https://github.com/WKDSteve/pickers.nvim): `find` and `grep` of the rules vault open a picker of pickers.nvim rooted at a ruleset, a family or a part. ([picture](assets/graphs/pair/rules.nvim--pickers.nvim.png))
 - [lib.nvim](https://github.com/WKDSteve/lib.nvim): the shared base of the plugins.
 
 **Used by**
 
+- [docmap.nvim](https://github.com/WKDSteve/docmap.nvim): docmap.nvim loads the engine of rules.nvim (settings, loader, runner, waivers) to show the rules of a gate and their results in its browser. ([picture](assets/graphs/pair/docmap.nvim--rules.nvim.png))
 - [rules-desktop](https://github.com/WKDSteve/rules-desktop): rules-desktop talks to rules.nvim as its engine (`rules-export/1`, `rules-ops/1`), pinned in `engine.lock`; the app never writes a rule itself. ([picture](assets/graphs/pair/rules-desktop--rules.nvim.png))
 - [tasks.nvim](https://github.com/WKDSteve/tasks.nvim): `import --from-rules` of tasks.nvim turns a work list of rules.nvim (`rules-work-list/1`) into tasks of an area. ([picture](assets/graphs/pair/tasks.nvim--rules.nvim.png))
 - [testing.nvim](https://github.com/WKDSteve/testing.nvim): The conformance step of testing.nvim checks a repository against a ruleset through rules.nvim (`rules_bridge`). ([picture](assets/graphs/pair/testing.nvim--rules.nvim.png))
