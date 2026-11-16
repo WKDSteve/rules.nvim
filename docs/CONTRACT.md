@@ -260,7 +260,10 @@ a `line` without `around` is put behind that line unchecked.
   not have to know the convention, and the divider is no part of the `text`
   that reads back. Blank lines at the end of a `text` are dropped, by `new` and
   by `set` alike: the text and the divider have exactly one blank line between
-  them, and a `set` of the text takes away a second one an older write left there. A divider line at the end of the text (`---`, `***`, `___`) that
+  them, and a `set` of the text takes away a second one an older write left in
+  front of the divider. That is the one exception to "everything else stays byte
+  for byte": blank lines in front of anything but the divider (a file that ends
+  without one, a heading) are kept as they are. A divider line at the end of the text (`---`, `***`, `___`) that
   stands right under a line of text gets a blank line in front of it, else the
   line above would be a heading (`foo` over `---`). CR LF line ends in a `text` are
   line ends (a lone CR is still a control character and refused): the file is

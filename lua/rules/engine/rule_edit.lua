@@ -580,16 +580,17 @@ function M.apply(path, text, patch)
       if #new == 0 and lines[first - 1] == "" and lines[first] == "" then
         table.remove(lines, first)
       end
-      -- one blank line between the text and what follows it (the divider): a second one, left by an older write of a
-      -- text that ended with a line break, goes with the next set instead of being kept as "everything else"
+      -- one blank line between the text and the divider `---` that ends the rule file: a second one, left by an
+      -- older write of a text that ended with a line break, goes with the next set instead of being kept as
+      -- "everything else". Only in front of that divider: blank lines before anything else (a file that ends
+      -- without a divider, a heading) stay byte for byte.
       local after = first + #new
-      if #new > 0 then
-        while
-          lines[after] ~= nil
-          and lines[after]:match("^%s*$")
-          and lines[after + 1] ~= nil
-          and lines[after + 1]:match("^%s*$")
-        do
+      local next_line = after
+      while lines[next_line] ~= nil and lines[next_line]:match("^%s*$") do
+        next_line = next_line + 1
+      end
+      if #new > 0 and next_line - after > 1 and lines[next_line] ~= nil and lines[next_line]:match("^%-%-%-%s*$") then
+        for _ = after + 1, next_line - 1 do
           table.remove(lines, after)
         end
       end

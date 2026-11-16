@@ -280,6 +280,16 @@ describe("rule_edit: one blank line between the text and the divider", function(
     assert.are.equal(base, assert(rule_edit.apply("DEP-01.md", older, { text = "Old.\n" })))
   end)
 
+  it("keeps blank lines that are not in front of the divider byte for byte", function()
+    -- a file that ends with its text and two blank lines, no divider (rules-vault REL-24)
+    local base = assert(rule_edit.render_new(vim.tbl_extend("force", SPEC, { text = "Old." })))
+    local no_divider = base:gsub("\nOld%.\n\n%-%-%-\n\n$", "\nOld.\n\n\n")
+    assert.are_not.equal(base, no_divider)
+    assert.are.equal(no_divider, assert(rule_edit.apply("DEP-01.md", no_divider, { text = "Old." })))
+    local other = assert(rule_edit.apply("DEP-01.md", no_divider, { text = "New." }))
+    assert.are.equal(no_divider, assert(rule_edit.apply("DEP-01.md", other, { text = "Old." })))
+  end)
+
   it("keeps the one blank line in a CR LF file", function()
     local base = assert(rule_edit.render_new(vim.tbl_extend("force", SPEC, { text = "Old." })))
     local crlf = base:gsub("\n", "\r\n")
