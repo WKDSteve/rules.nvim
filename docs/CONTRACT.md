@@ -258,7 +258,9 @@ a `line` without `around` is put behind that line unchecked.
   ends with `---` (with or without blank lines after it) is not given a second
   one, any other text gets it, and so does a rule without a text. A caller does
   not have to know the convention, and the divider is no part of the `text`
-  that reads back. A divider line at the end of the text (`---`, `***`, `___`) that
+  that reads back. Blank lines at the end of a `text` are dropped, by `new` and
+  by `set` alike: the text and the divider have exactly one blank line between
+  them, and a `set` of the text takes away a second one an older write left there. A divider line at the end of the text (`---`, `***`, `___`) that
   stands right under a line of text gets a blank line in front of it, else the
   line above would be a heading (`foo` over `---`). CR LF line ends in a `text` are
   line ends (a lone CR is still a control character and refused): the file is

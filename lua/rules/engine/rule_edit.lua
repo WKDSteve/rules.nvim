@@ -417,13 +417,16 @@ local function lf(text)
 end
 
 ---Lines of a text for a rule file. A divider line (`---`, `***`, `___`) at the end of the text, right under a line of
----text, would make that line a heading (`---`) or glue to it: a blank line goes in front of it.
+---text, would make that line a heading (`---`) or glue to it: a blank line goes in front of it. Blank lines at the end
+---of the text are dropped: the file puts exactly one between the text and what follows, and a text that ends with a
+---line break (as most editors and clients write one) must not add a second.
 ---@param text string
 ---@return string[]
 local function text_lines(text)
   local lines = vim.split(text, "\n", { plain = true })
   local last = #lines
   while last > 0 and lines[last]:match("^%s*$") do
+    lines[last] = nil
     last = last - 1
   end
   if last >= 2 and parser.is_framing(lines[last]) and not parser.is_framing(lines[last - 1]) then
@@ -576,6 +579,19 @@ function M.apply(path, text, patch)
       -- no text left: one blank line between what is above and what is below, as in a file made without text
       if #new == 0 and lines[first - 1] == "" and lines[first] == "" then
         table.remove(lines, first)
+      end
+      -- one blank line between the text and what follows it (the divider): a second one, left by an older write of a
+      -- text that ended with a line break, goes with the next set instead of being kept as "everything else"
+      local after = first + #new
+      if #new > 0 then
+        while
+          lines[after] ~= nil
+          and lines[after]:match("^%s*$")
+          and lines[after + 1] ~= nil
+          and lines[after + 1]:match("^%s*$")
+        do
+          table.remove(lines, after)
+        end
       end
     elseif #new > 0 then
       local insert = {}

@@ -254,3 +254,36 @@ describe("rule_edit: the severity of a block that spells the key in brackets", f
     assert.are.equal((text:gsub("severity: critical", "severity: recommended", 1)), changed)
   end)
 end)
+
+describe("rule_edit: one blank line between the text and the divider", function()
+  local ENDS = { "", "\n", "\n\n", "\n \n\n", "\r\n", "\r\n\r\n" }
+
+  for _, tail in ipairs(ENDS) do
+    it(("new writes one blank line before the divider for a text ending in %q"):format(tail), function()
+      local made = assert(rule_edit.render_new(vim.tbl_extend("force", SPEC, { text = "One." .. tail })))
+      assert.is_truthy(made:find("\nOne%.\n\n%-%-%-\n\n$"), made)
+    end)
+
+    it(("set writes one blank line before the divider for a text ending in %q"):format(tail), function()
+      local base = assert(rule_edit.render_new(vim.tbl_extend("force", SPEC, { text = "Old." })))
+      local changed = assert(rule_edit.apply("DEP-01.md", base, { text = "New." .. tail }))
+      assert.is_truthy(changed:find("\nNew%.\n\n%-%-%-\n\n$"), changed)
+    end)
+  end
+
+  it("set takes away surplus blank lines an older write left before the divider", function()
+    local base = assert(rule_edit.render_new(vim.tbl_extend("force", SPEC, { text = "Old." })))
+    local older = base:gsub("\nOld%.\n\n%-%-%-", "\nOld.\n\n\n\n---")
+    assert.are_not.equal(base, older)
+    -- the same text: the file still changes, so `ops` does not report it as unchanged
+    assert.are.equal(base, assert(rule_edit.apply("DEP-01.md", older, { text = "Old." })))
+    assert.are.equal(base, assert(rule_edit.apply("DEP-01.md", older, { text = "Old.\n" })))
+  end)
+
+  it("keeps the one blank line in a CR LF file", function()
+    local base = assert(rule_edit.render_new(vim.tbl_extend("force", SPEC, { text = "Old." })))
+    local crlf = base:gsub("\n", "\r\n")
+    local changed = assert(rule_edit.apply("DEP-01.md", crlf, { text = "New.\r\n\r\n" }))
+    assert.is_truthy(changed:find("\r\nNew%.\r\n\r\n%-%-%-\r\n\r\n$"), changed)
+  end)
+end)
