@@ -201,13 +201,11 @@ function _G.bufpath()
   return vim.fs.normalize(vim.uv.fs_realpath(name) or name)
 end
 
----The floating windows that take the focus.
----@return integer[]
-function _G.floats()
-  return vim.tbl_filter(function(w)
-    local c = vim.api.nvim_win_get_config(w)
-    return c.relative ~= "" and c.focusable
-  end, vim.api.nvim_list_wins())
+---Whether the focus is in a floating window: the button dialog of a question has it, a toast never takes it. A
+---sheet types its answer only then, so the key cannot land in the buffer behind.
+---@return boolean
+function _G.dialog()
+  return vim.api.nvim_win_get_config(0).relative ~= ""
 end
 
 ---The lines of the current buffer, joined.

@@ -121,7 +121,7 @@ add({
   input = ":RulesVault create new-vault demo<CR>",
   note = ":RulesVault create new-vault demo: another vault is in use, so it asks",
 })
-add({ wait = [[#_G.floats() > 0]], note = "the plan question" })
+add({ wait = [[_G.dialog()]], note = "the plan question" })
 add({ keys = "y", note = "answer yes" })
 add({
   wait = [[_G.read(_G.fx.project .. "/new-vault/.rules.json") ~= nil]],
@@ -139,10 +139,10 @@ add({
 })
 add({ lua = [[vim.fn.writefile({ "mine" }, _G.fx.project .. "/new-vault/README.md")]], note = "a file of the user" })
 add({ input = ":RulesVault create new-vault demo<CR>", note = "create again over the existing vault" })
-add({ wait = [[#_G.floats() > 0]] })
+add({ wait = [[_G.dialog()]] })
 add({ keys = "y" })
 add({
-  wait = [[#_G.floats() == 0 and _G.read(_G.fx.project .. "/new-vault/README.md") == "mine\n"]],
+  wait = [[not _G.dialog() and _G.read(_G.fx.project .. "/new-vault/README.md") == "mine\n"]],
   note = "a file that is there is never overwritten",
 })
 

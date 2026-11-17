@@ -30,9 +30,9 @@ end
 ---Type `:cmd` that asks first, answer the question with `answer` and check what it did.
 local function ask(line, answer, expect, note)
   add({ input = ":" .. line .. "<CR>", note = ":" .. line .. ": " .. note })
-  add({ wait = [[#_G.floats() > 0]], note = ":" .. line .. " asks first: the button dialog" })
+  add({ wait = [[_G.dialog()]], note = ":" .. line .. " asks first: the button dialog" })
   add({ keys = answer, note = "answer " .. answer })
-  add({ wait = [[#_G.floats() == 0]], note = "the dialog is gone" })
+  add({ wait = [[not _G.dialog()]], note = "the dialog is gone" })
   add({ wait = expect, note = ":" .. line .. " " .. note })
 end
 
