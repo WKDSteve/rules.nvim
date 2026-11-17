@@ -56,6 +56,16 @@ cmd(
   [[_G.qftext() == "DEP-02 [critical] Pin every dependency" and _G.said("1 rule(s) in the quickfix list", true)]],
   "narrows it by family and severity"
 )
+-- the JSON goes to :messages, a long message: read as `:execute` reads it, as a script would capture it
+add({
+  lua = [[_G.json = vim.json.decode(vim.trim(vim.fn.execute("Rules list --format=json")))]],
+  note = ":Rules list --format=json prints the document of the machine contract",
+})
+add({
+  expect = [[_G.json.kind == "rules.list" and _G.json.total == 2 and _G.json.items[1].id == "DEP-01"
+    and _G.json.items[2].id == "DEP-02"]],
+  note = "the rules.list document with both rules",
+})
 add({ keys = ":cclose<CR>" })
 
 cmd(
@@ -76,11 +86,39 @@ cmd(
 )
 close_tab()
 
+add({
+  lua = [[_G.json = vim.json.decode(vim.trim(vim.fn.execute("Rules check --family=DEP --format=json")))]],
+  note = ":Rules check --format=json prints the results instead of the report",
+})
+add({
+  expect = [[#_G.json == 2 and _G.json[1].id == "DEP-01" and _G.json[1].status == "fail"
+    and _G.json[1].findings[1].line == 1 and _G.json[2].status == "manual"
+    and vim.bo.filetype ~= "rulesreport"]],
+  note = "one result per rule, the finding with its line; no report tab",
+})
+
 cmd(
   "Rules gate review",
   [[vim.bo.filetype == "rulesreport" and _G.buftext():find("DEP-01 -- 1 finding(s)", 1, true)
     and #vim.fn.getqflist() == 1]],
   "runs the families of the configured gate"
+)
+close_tab()
+-- --diff: the project as a git repository whose last commit has main.lua; a new file with a finding beside it
+add({
+  lua = [[local g = { "git", "-c", "commit.gpgsign=false", "-c", "user.name=sheet", "-c", "user.email=sheet@example.test" }
+    for _, a in ipairs({ { "init", "-q" }, { "add", "-A" }, { "commit", "-q", "-m", "base" } }) do
+      vim.fn.system(vim.list_extend(vim.list_slice(g), a))
+      assert(vim.v.shell_error == 0, "git " .. a[1])
+    end
+    vim.fn.writefile({ "-- FIXME: new" }, _G.fx.project .. "/new.lua")]],
+  note = "the project in git; new.lua (FIXME) is not committed",
+})
+cmd(
+  "Rules gate review --diff=HEAD",
+  [[vim.bo.filetype == "rulesreport" and #vim.fn.getqflist() == 1 and _G.qftext() == "[DEP-01] -- FIXME: new"
+    and not _G.buftext():find("main.lua", 1, true)]],
+  "narrows the findings to the files changed since the ref"
 )
 close_tab()
 cmd(

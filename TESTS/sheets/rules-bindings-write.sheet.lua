@@ -75,6 +75,20 @@ cmd(
   true
 )
 
+add({
+  lua = [[vim.api.nvim_buf_set_lines(0, -1, -1, false, { "unsaved line" }); _G.old = _G.read(vim.api.nvim_buf_get_name(0))]],
+  note = "a change of the person in the open buffer, not written",
+})
+cmd(
+  "Rules set DEP-02 severity=critical",
+  [[_G.read(_G.fx.lua .. "/_rules/DEP/DEP-02.md") == _G.old:gsub("severity: recommended", "severity: critical")
+    and vim.bo.modified and _G.buftext():find("unsaved line", 1, true) and _G.text():find("changed DEP-02", 1, true)
+    and _G.said("has unsaved changes and the file changed on disk: the buffer was left as it is", true)]],
+  "writes the file and reports the buffer with unsaved changes, which it leaves as it is"
+)
+-- (the ftplugin's `sil! nunmap` of the reload sets v:errmsg, see above)
+add({ lua = [[vim.cmd("edit!"); vim.v.errmsg = ""]], note = "take the file's version" })
+
 -- ---------- move ----------
 cmd(
   "Rules move DEP-04 --to=Dependencies.md#Extra",
