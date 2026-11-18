@@ -43,6 +43,7 @@ provide — the same way you'd point ESLint at your own `.eslintrc`.
 - [Installation](#installation)
 - [Quickstart](#quickstart)
 - [Ruleset format](#ruleset-format)
+- [MCP server](#mcp-server)
 - [Contributing](#contributing)
 - [Feedback](#feedback)
 - [License](#license)
@@ -223,6 +224,22 @@ a ruleset of documents into that form and proves the result byte for byte. Both
 forms load side by side; see
 [Layouts and catalogs](docs/RULESET-FORMAT.md#layouts-and-catalogs) and
 [Migrating a ruleset](docs/RULESET-FORMAT.md#migrating-a-ruleset).
+
+## MCP server
+
+`scripts/mcp.lua` serves the read methods of `rules-export/1` ([docs/CONTRACT.md](docs/CONTRACT.md)) as MCP tools
+over stdio, for Claude Code and other agents: `rules_hello`, `rules_list`, `rules_rule`, `rules_next_id`,
+`rules_sources`, `rules_waivers`, `rules_rulesets`. Each answers the contract's JSON document; an error document is an
+error result. There is no write tool: a rule or a waiver written by the agent whose code the rule judges would let it
+excuse its own findings.
+
+```sh
+claude mcp add rules -- nvim --headless -u NONE -l /path/to/rules.nvim/scripts/mcp.lua --ruleset=/path/to/rulesets/lua
+```
+
+`--ruleset`, `--vault`, `--project` and `--trust` mean what they mean for `scripts/rules.lua`; without them the server
+reads `$RULES_RULESETS`, `$RULES_VAULT`, `$RULES_PROJECT` and `$RULES_TRUST`. Needs lib.nvim with
+`lib.nvim.mcp.server`.
 
 ## Contributing
 
