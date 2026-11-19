@@ -138,7 +138,8 @@ package.loaded["pickers.engines"] = {
 }
 
 vim.cmd.cd(project)
-require("rules").setup({
+-- `_G.fx_setup` (set by the step before the `dofile`): what a feature sheet adds to the setup, `agent` for instance
+require("rules").setup(vim.tbl_deep_extend("force", {
   rulesets = { lua },
   vault = vault,
   gates = {
@@ -146,7 +147,7 @@ require("rules").setup({
     release = { "REL" },
     review = { "DEP" },
   },
-})
+}, _G.fx_setup or {}))
 
 local popup = require("lib.nvim.notify.popup")
 
@@ -206,6 +207,33 @@ end
 ---@return boolean
 function _G.dialog()
   return vim.api.nvim_win_get_config(0).relative ~= ""
+end
+
+---Run git in `dir` for the fixture (no signing, a fixed author); errors when git fails. A
+---start from this file is the sheet's preparation for `testing perf`, never the plugin's.
+---@param dir string
+---@param args string[]
+---@return string stdout
+function _G.git(dir, args)
+  local argv = {
+    "git",
+    "-C",
+    dir,
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "tag.gpgsign=false",
+    "-c",
+    "user.name=sheet",
+    "-c",
+    "user.email=sheet@example.test",
+    "-c",
+    "init.defaultBranch=main",
+  }
+  vim.list_extend(argv, args)
+  local done = vim.system(argv, { text = true }):wait(30000)
+  assert(done.code == 0, ("git %s: %s"):format(table.concat(args, " "), done.stderr or ""))
+  return done.stdout or ""
 end
 
 ---The lines of the current buffer, joined.
