@@ -612,7 +612,19 @@ end
 
 -- ── bare command ─────────────────────────────────────────────────────────────────────
 
----`:RulesVault`: the vault in use.
+---The `:RulesVault` that waits for `git status` (a newer call replaces it: the table is its token) and its git.
+---@type { job: { stop: fun() }|nil }|nil
+local status_pending
+
+---Whether a `:RulesVault` still waits for git (for specs and sheets: the message comes when this is false).
+---@return boolean
+function M.status_pending()
+  return status_pending ~= nil
+end
+
+---`:RulesVault`: the vault in use. The message comes when `git status` has answered (`rules.vault.git_state_async`):
+---the editor never waits for git. A second `:RulesVault` before that replaces the first (its git is stopped, its
+---message is not given), so one message answers the last question.
 ---@param ctx table
 function M.status(ctx)
   local vctx = prepare(ctx)
@@ -623,18 +635,39 @@ function M.status(ctx)
   local lines = { ("Vault: %s (from %s)"):format(vctx.root, where) }
   local names = ops.ruleset_names(vctx)
   lines[#lines + 1] = #names > 0 and ("rulesets: " .. table.concat(names, ", ")) or "no ruleset yet"
-  local state = require("rules.vault").git_state(vctx.root)
-  if state then
-    if not state.repo then
-      lines[#lines + 1] = "git: not a repository of its own"
-    elseif state.clean then
-      lines[#lines + 1] = "git: clean"
-    else
-      lines[#lines + 1] = ("git: %d uncommitted path(s)"):format(state.changes)
+  if status_pending then
+    local old = status_pending
+    status_pending = nil
+    if old.job then
+      old.job.stop()
     end
   end
-  lines[#lines + 1] = ":RulesVault open|clipboard|link|find|grep|tree|cdx [<ruleset>|<ID>|<FAMILY>] [rules|layouts|catalogs|all]"
-  notify.info(table.concat(lines, "\n"))
+  local mine = {}
+  status_pending = mine
+  local function say(state)
+    if status_pending ~= mine then
+      return
+    end
+    status_pending = nil
+    if state then
+      if not state.repo then
+        lines[#lines + 1] = "git: not a repository of its own"
+      elseif state.clean then
+        lines[#lines + 1] = "git: clean"
+      elseif state.error then
+        lines[#lines + 1] = "git: " .. state.error
+      else
+        lines[#lines + 1] = ("git: %d uncommitted path(s)"):format(state.changes)
+      end
+    end
+    lines[#lines + 1] =
+      ":RulesVault open|clipboard|link|find|grep|tree|cdx [<ruleset>|<ID>|<FAMILY>] [rules|layouts|catalogs|all]"
+    notify.info(table.concat(lines, "\n"))
+  end
+  local job = require("rules.vault").git_state_async(vctx.root, say)
+  if status_pending == mine then
+    mine.job = job
+  end
 end
 
 return M

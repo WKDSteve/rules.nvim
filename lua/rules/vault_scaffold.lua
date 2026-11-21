@@ -356,6 +356,9 @@ end
 ---What `--git` would do in a folder: `init`, `already` (the folder is a repository of its own), or `inside` (it lies in
 ---another repository, which `git init` must not nest a second one in). A folder that is not there yet is judged by the
 ---nearest folder above it that is.
+---
+---Read from the `.git` files (`rules.git_files.find`), no git process: the plan is made twice (before the question and
+---again after it), and only the top of the work tree is asked, never its state.
 ---@param root string
 ---@return "init"|"already"|"inside" what
 ---@return string|nil top  the repository it lies in
@@ -368,17 +371,23 @@ function M.git_plan(root)
     end
     probe = parent
   end
-  local state = require("rules.vault").git_state(probe)
-  if not state then
+  if vim.fn.executable("git") ~= 1 then
     return "init", nil
   end
-  if state.repo then
+  local repo, redirected = require("rules.git_files").find(probe)
+  local top = repo and repo.top
+  if redirected then
+    -- GIT_DIR and the like point git elsewhere: ask git, as before
+    local state = require("rules.vault").git_state(probe)
+    top = state and (state.repo and probe or state.inside) or nil
+  end
+  if not top then
+    return "init", nil
+  end
+  if require("lib.nvim.fs.same_path")(top, probe, { realpath = true }) then
     return probe == root and "already" or "inside", probe ~= root and probe or nil
   end
-  if state.inside then
-    return "inside", state.inside
-  end
-  return "init", nil
+  return "inside", top
 end
 
 ---What `create` would make, in the order it makes it. Reads the disk, writes nothing.

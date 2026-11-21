@@ -112,7 +112,43 @@ end
 ---@param extra? Rules.Contract.Opts
 ---@return Rules.Contract.Opts
 function M.editor_opts(extra)
+  M.prewarm()
   return vim.tbl_extend("force", { project = vim.fn.getcwd() }, extra or {})
+end
+
+local prewarm_asked = false
+
+---Ask git for the commit of the engine (`engine.git` in every head) in the background, so that no document of the
+---editor waits for it: every editor path asks for `editor_opts` before it builds a document, and that calls this. A
+---document made while the lookup runs says "unknown" (the list for the quickfix list, a write through the door: the
+---editor reads their items, not their head); `settle_engine` is for the one document the editor shows as it is. Not in
+---`setup` (no process on load or setup, SEC-22), and never in the hosts (`scripts/*.lua`): there the wait does not hurt.
+---Does nothing when the answer is known or a lookup runs already (`lib.nvim.contract.doc` `prewarm`).
+function M.prewarm()
+  prewarm_asked = true
+  d.prewarm()
+end
+
+---Before a document the person or a script reads as it is (`:Rules list --format=json`): wait for a lookup that
+---`prewarm` started, at most `timeout_ms`, so its head names the commit as it always did instead of "unknown". Returns at
+---once when the answer is known, when no lookup was started, or when the plugin folder is no checkout of its own (the
+---answer is "unknown" then anyway).
+---@param timeout_ms? integer  default 2500 (the 2 s of the lookup and a margin)
+function M.settle_engine(timeout_ms)
+  if not prewarm_asked then
+    return
+  end
+  prewarm_asked = false
+  if vim.fn.executable("git") ~= 1 then
+    return
+  end
+  local repo = require("rules.git_files").find(plugin_root)
+  if not (repo and require("lib.nvim.fs.same_path")(repo.top, plugin_root, { realpath = true })) then
+    return
+  end
+  vim.wait(timeout_ms or 2500, function()
+    return base_engine_info().git ~= "unknown"
+  end, 5)
 end
 
 ---@param opts Rules.Contract.Opts|nil

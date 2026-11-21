@@ -1122,5 +1122,81 @@ describe(":RulesVault", function()
       assert.is_truthy(text:find("rulesets: lua, native", 1, true))
       assert.is_truthy(text:find(":RulesVault open|clipboard|link|find|grep|tree|cdx", 1, true))
     end)
+
+    describe("in a vault that is a git repository", function()
+      local git_lib = require("lib.nvim.git")
+      local saved_run, saved_run_async, saved_executable
+      ---@type { args: string[], opts: table, on_done: fun(res: table), stopped: boolean }[]
+      local started
+
+      before_each(function()
+        -- a repository as the .git files show it; git itself is the stub below (no process in this spec)
+        write_raw(vault .. "/.git/HEAD", "ref: refs/heads/main\n")
+        started = {}
+        saved_run, saved_run_async, saved_executable = git_lib.run, git_lib.run_async, vim.fn.executable
+        git_lib.run = function(args)
+          error("the editor waited for git " .. table.concat(args, " "))
+        end
+        git_lib.run_async = function(args, opts, on_done)
+          local job = { args = args, opts = opts, on_done = on_done, stopped = false }
+          started[#started + 1] = job
+          return {
+            stop = function()
+              job.stopped = true
+            end,
+          }
+        end
+        vim.fn.executable = function(name)
+          if name == "git" then
+            return 1
+          end
+          return saved_executable(name)
+        end
+      end)
+
+      after_each(function()
+        git_lib.run, git_lib.run_async, vim.fn.executable = saved_run, saved_run_async, saved_executable
+      end)
+
+      it("never waits for git: the message comes when git status answers", function()
+        run("RulesVault")
+        assert.are.equal(0, #notes, "nothing is said before git answered")
+        assert.is_true(cmd.status_pending())
+        assert.are.equal(1, #started, "one git start: the top of the work tree comes from the .git files")
+        assert.are.same({ "status", "--porcelain" }, started[1].args)
+        assert.is_true(started[1].opts.read_only)
+
+        started[1].on_done({ code = 0, stdout = " M rulesets/lua/_rules/DEP/DEP-01.md\n?? new.md\n", stderr = "" })
+
+        assert.is_false(cmd.status_pending())
+        assert.are.equal(1, #notes)
+        assert.is_truthy(notes[1].text:find("Vault: " .. vim.fs.normalize(vault), 1, true))
+        assert.is_truthy(notes[1].text:find("rulesets: lua, native", 1, true))
+        assert.is_truthy(notes[1].text:find("git: 2 uncommitted path(s)", 1, true))
+      end)
+
+      it("answers the last question: a second :RulesVault stops the first, whose late answer says nothing", function()
+        run("RulesVault")
+        run("RulesVault")
+        assert.are.equal(2, #started)
+        assert.is_true(started[1].stopped)
+        assert.is_false(started[2].stopped)
+
+        started[1].on_done({ code = 0, stdout = " M a.md\n", stderr = "" })
+        assert.are.equal(0, #notes, "the replaced question is not answered")
+        assert.is_true(cmd.status_pending())
+
+        started[2].on_done({ code = 0, stdout = "", stderr = "" })
+        assert.are.equal(1, #notes)
+        assert.is_truthy(notes[1].text:find("git: clean", 1, true))
+      end)
+
+      it("says why git could not tell instead of a count of nothing", function()
+        run("RulesVault")
+        started[1].on_done({ code = 128, stdout = "", stderr = "fatal: detected dubious ownership\n" })
+        assert.are.equal(1, #notes)
+        assert.is_truthy(notes[1].text:find("git: fatal: detected dubious ownership", 1, true))
+      end)
+    end)
   end)
 end)

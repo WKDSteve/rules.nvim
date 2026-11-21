@@ -187,16 +187,64 @@ describe("rules.vault.behind @spawn", function()
     assert.are.equal(1, vault.behind(shared_behind().a .. "/rulesets/lua"))
   end)
 
-  it("asks git for the local refs only: read only, with a timeout, no fetch, no pull", function()
+  ---Count the git starts of `fn` (lib.nvim.git.run, the one runner `behind` uses).
+  ---@param fn fun(): any
+  ---@return integer starts
+  ---@return any result
+  local function counting_git(fn)
     local git_lib = require("lib.nvim.git")
     local original = git_lib.run
+    local starts = 0
+    git_lib.run = function(...)
+      starts = starts + 1
+      return original(...)
+    end
+    local ok, result = pcall(fn)
+    git_lib.run = original
+    assert(ok, result)
+    return starts, result
+  end
+
+  it("reads an up-to-date vault from the .git files: no git process", function()
+    local m = shared_clean()
+    local starts, behind = counting_git(function()
+      return vault.behind(m.a)
+    end)
+    assert.are.equal(0, behind)
+    assert.are.equal(0, starts, "HEAD and its upstream are one commit: the files say 0")
+  end)
+
+  it("asks git once for a pair of commits, then keeps the count", function()
+    local m = machines()
+    other_machine_makes_dep03(m)
+    local starts, counts = counting_git(function()
+      return { vault.behind(m.a), vault.behind(m.a .. "/rulesets/lua") }
+    end)
+    assert.are.same({ 1, 1 }, counts)
+    assert.are.equal(1, starts, "the count of two commits never changes")
+    git(m.a, "pull", "-q", "--ff-only")
+    starts, counts = counting_git(function()
+      return { vault.behind(m.a) }
+    end)
+    assert.are.same({ 0 }, counts, "a pull is a new pair: nothing kept answers it")
+    assert.are.equal(0, starts)
+  end)
+
+  it("asks git for the local refs only: read only, with a timeout, no fetch, no pull", function()
+    local git_lib = require("lib.nvim.git")
+    local files = require("rules.git_files")
+    local original, original_upstream = git_lib.run, files.upstream
     local seen
     git_lib.run = function(args, opts)
       seen = { args = args, opts = opts }
       return { code = 0, stdout = "2\n", stderr = "" }
     end
+    -- the .git files cannot tell (a config with includes, say): git is asked
+    files.upstream = function()
+      return nil, true
+    end
     local ok, behind = pcall(vault.behind, "/somewhere")
-    git_lib.run = original
+    git_lib.run, files.upstream = original, original_upstream
     assert(ok, behind)
     assert.are.equal(2, behind)
     assert.are.same({ "rev-list", "--count", "HEAD..@{u}" }, seen.args)
@@ -208,7 +256,11 @@ describe("rules.vault.behind @spawn", function()
 
   it("is silent when git times out, fails, or answers with something else", function()
     local git_lib = require("lib.nvim.git")
-    local original = git_lib.run
+    local files = require("rules.git_files")
+    local original, original_upstream = git_lib.run, files.upstream
+    files.upstream = function()
+      return nil, true
+    end
     for _, answer in ipairs({
       { code = 1, stdout = "", stderr = "fatal: no upstream configured" },
       { code = 0, stdout = "", timed_out = true },
@@ -222,6 +274,7 @@ describe("rules.vault.behind @spawn", function()
       assert(ok, behind)
       assert.is_nil(behind, vim.inspect(answer))
     end
+    files.upstream = original_upstream
   end)
 
   it("is silent when git is not installed", function()

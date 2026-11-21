@@ -377,7 +377,9 @@ in the vault folder). Three things back it up, none of them replaces it:
 
 - **A warning before the clash.** `:Rules new` and the `new` operation of `rules-ops/1` look, read only and without the
   network, whether the vault is a git repository that lies behind its upstream (`git rev-list --count HEAD..@{u}`, a
-  3 second limit; silent when there is no git, no upstream or no vault, and for a ruleset that is not in the vault). If it
+  3 second limit; silent when there is no git, no upstream or no vault, and for a ruleset that is not in the vault; when
+  the vault's `.git` files show HEAD and its upstream at one commit, git is not started at all, and a count git gave is
+  kept for that pair of commits). If it
   does, the entry of the result carries `warnings` (see [CONTRACT.md](CONTRACT.md#rules-ops1-write)), `:Rules new` shows
   them as a warning after the line that says what was made, and the question of the form shows them before you confirm.
   It is a **warning, not a refusal**: the rule is made. It knows what your last `git fetch` brought home, nothing more;
@@ -395,8 +397,9 @@ in the vault folder). Three things back it up, none of them replaces it:
 
 Shows whether a project file and a vault file were loaded (and from where), every problem and warning, the vault, where
 its value came from, the rulesets it offers, which place `rulesets`, `gates` and the `agent` settings came from, and
-whether the vault is a git repository and clean. The git check is read-only (`git rev-parse`, `git status
---porcelain --no-optional-locks`, no network, a 5 second timeout) and says nothing when git is not installed.
+whether the vault is a git repository and clean. The git check is read-only (the top of the work tree from the `.git`
+files, then `git status --porcelain --no-optional-locks`, no network, a 5 second timeout) and says nothing when git is not
+installed. `:RulesVault` asks the same in the background: its message comes when git has answered.
 
 ## Headless tools
 

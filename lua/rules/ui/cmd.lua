@@ -639,11 +639,11 @@ end
 function M.list(ctx)
   local params = { family = ctx.flags.family, severity = ctx.flags.severity }
   if ctx.flags.format == "json" then
-    local text = require("rules.api").call(
-      "list",
-      { params = vim.tbl_extend("force", params, { limit = 500 }) },
-      require("rules.contract").editor_opts()
-    )
+    local contract = require("rules.contract")
+    local opts = contract.editor_opts()
+    -- the document is printed as it is: its head names the engine's commit, not "unknown" while git is asked
+    contract.settle_engine()
+    local text = require("rules.api").call("list", { params = vim.tbl_extend("force", params, { limit = 500 }) }, opts)
     print(text)
     return
   end

@@ -104,10 +104,16 @@ function M.by()
   return nil
 end
 
---- The commit the tree is at, or nil outside a repository (then the verdict is kept without one).
+--- The commit the tree is at, or nil outside a repository (then the verdict is kept without one). Read from the `.git`
+--- files (`rules.git_files.head`, no process on the UI loop); git is asked only where the files do not answer the way
+--- git would (a reftable repository, an unusual HEAD).
 ---@param root string
 ---@return string|nil
 local function head_commit(root)
+  local head, unsure = require("rules.git_files").head(root)
+  if not unsure then
+    return head and head.sha or nil
+  end
   local ok, done = pcall(function()
     return vim.system({ "git", "-C", root, "rev-parse", "HEAD" }, { text = true }):wait(3000)
   end)

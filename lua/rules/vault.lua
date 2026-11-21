@@ -19,9 +19,11 @@
 --- `:Rules check` uses). The names of the rulesets in a document stay the folder names (`lua`, `native`), never these
 --- paths (`rules-export/1`).
 ---
---- Reads only: `git_state` runs `git rev-parse` and `git status --porcelain` (no network, no lock, a timeout), and
---- says nothing when git is not installed. `behind` runs `git rev-list --count HEAD..@{u}` the same way: how far the
---- vault lies behind its upstream, the question `rules.ops` asks before a rule is made.
+--- Reads only: `git_state` reads the top of the work tree from the `.git` files and runs `git status --porcelain` (no
+--- network, no lock, a timeout), and says nothing when git is not installed; `git_state_async` is the same without
+--- waiting (`:RulesVault`). `behind` is how far the vault lies behind its upstream, the question `rules.ops` asks
+--- before a rule is made: from the `.git` files when HEAD and upstream are one commit, else `git rev-list --count
+--- HEAD..@{u}` the same way, kept for that pair of commits.
 
 local settings = require("rules.settings")
 
@@ -115,36 +117,56 @@ local function same_folder(a, b)
   return require("lib.nvim.fs.same_path")(a, b, { realpath = true })
 end
 
----Whether `root` is a git repository and has nothing to commit. Read only: `git rev-parse --show-toplevel` and
----`git status --porcelain` with `--no-optional-locks` (the index is not touched), no network, five seconds at most each.
+---The git options of the read-only questions: no lock (`--no-optional-locks`), no lazy fetch, five seconds at most.
 ---@param root string
----@return Rules.Vault.GitState|nil state  `nil` when git is not installed: nothing to say
-function M.git_state(root)
+---@return table
+local function status_opts(root)
+  return { dir = root, timeout_ms = 5000, read_only = true, no_lazy_fetch = true }
+end
+
+---What the files say before `git status` runs: whether git is there and where the work tree of `root` has its top.
+---`final` is set when no git process is needed for the answer (git not installed: `nil`; no repository above `root`).
+---@param root string
+---@return Rules.Vault.GitState|nil state
+---@return boolean final
+local function git_frame(root)
   if vim.fn.executable("git") ~= 1 then
-    return nil
+    return nil, true
   end
-  local git = require("lib.nvim.git")
-  local opts = { dir = root, timeout_ms = 5000, read_only = true, no_lazy_fetch = true }
-  local top = git.run({ "rev-parse", "--show-toplevel" }, opts)
-  if top.timed_out then
-    return { repo = false, changes = 0, error = "git did not answer within 5 seconds" }
+  -- the top of the work tree from the `.git` files (rules.git_files), not from `git rev-parse --show-toplevel`: one
+  -- git start less on the UI loop, the same answer
+  local repo, redirected = require("rules.git_files").find(root)
+  local top = repo and repo.top
+  if redirected then
+    -- GIT_DIR and the like point git elsewhere: only git knows its answer (rare, and asked as before)
+    local res = require("lib.nvim.git").run({ "rev-parse", "--show-toplevel" }, status_opts(root))
+    if res.timed_out then
+      return { repo = false, changes = 0, error = "git did not answer within 5 seconds" }, true
+    end
+    top = res.code == 0 and vim.trim(res.stdout or "") or nil
   end
-  if top.code ~= 0 then
-    return { repo = false, changes = 0 }
+  if not top then
+    return { repo = false, changes = 0 }, true
   end
-  local toplevel = vim.trim(top.stdout)
-  local state = { repo = same_folder(toplevel, root), changes = 0 }
+  local state = { repo = same_folder(top, root), changes = 0 }
   if not state.repo then
-    state.inside = toplevel
+    state.inside = top
   end
-  local status = git.run({ "status", "--porcelain" }, opts)
+  return state, false
+end
+
+---Put the answer of `git status --porcelain` into `state`.
+---@param state Rules.Vault.GitState
+---@param status Lib.Git.RunResult
+---@return Rules.Vault.GitState
+local function settle_status(state, status)
   if status.timed_out or status.code ~= 0 then
     state.error = status.timed_out and "git status did not answer within 5 seconds"
       or vim.trim(status.stderr or "git status failed")
     return state
   end
   local count = 0
-  for line in status.stdout:gmatch("[^\r\n]+") do
+  for line in (status.stdout or ""):gmatch("[^\r\n]+") do
     if line ~= "" then
       count = count + 1
     end
@@ -153,8 +175,64 @@ function M.git_state(root)
   return state
 end
 
+---Whether `root` is a git repository and has nothing to commit. Read only: the top of the work tree comes from the
+---`.git` files, then one `git status --porcelain` with `--no-optional-locks` (the index is not touched), no network,
+---five seconds at most. Waits for git: a front end on the UI loop takes `git_state_async`.
+---@param root string
+---@return Rules.Vault.GitState|nil state  `nil` when git is not installed: nothing to say
+function M.git_state(root)
+  local state, final = git_frame(root)
+  if final or not state then
+    return state
+  end
+  return settle_status(state, require("lib.nvim.git").run({ "status", "--porcelain" }, status_opts(root)))
+end
+
+---`git_state` without waiting: `on_done` gets the same answer. When no git process is needed (git not installed, no
+---repository above `root`) it is called at once, before this returns, and the handle is `nil`; otherwise from the
+---callback of `git status` (`vim.schedule`d, so it may touch the editor), exactly once, also when the start fails.
+---@param root string
+---@param on_done fun(state: Rules.Vault.GitState|nil)
+---@return { stop: fun() }|nil handle  stops the running `git status`; `on_done` is then not called
+function M.git_state_async(root, on_done)
+  local state, final = git_frame(root)
+  if final or not state then
+    on_done(state)
+    return nil
+  end
+  local stopped = false
+  local ok, job = pcall(require("lib.nvim.git").run_async, { "status", "--porcelain" }, status_opts(root), function(res)
+    if not stopped then
+      on_done(settle_status(state, res))
+    end
+  end)
+  if not ok then
+    -- a start that throws still answers once, on a later tick like every other answer
+    vim.schedule(function()
+      if not stopped then
+        on_done(settle_status(state, { code = -1, stdout = "", stderr = tostring(job) }))
+      end
+    end)
+    job = nil
+  end
+  return {
+    stop = function()
+      stopped = true
+      if job then
+        pcall(job.stop)
+      end
+    end,
+  }
+end
+
 ---How long `behind` waits for git: it reads the local refs only, so this is a generous bound, not a typical time.
 M.BEHIND_TIMEOUT_MS = 3000
+
+---Counts of `git rev-list --count A..B` by `"<A>..<B>"`: the count of two commits never changes. Emptied when it grows
+---past 64 pairs (a long session with many fetches).
+---@type table<string, integer>
+local behind_cache = {}
+local behind_cache_size = 0
 
 ---How many commits the upstream of the repository `root` lies in has that `HEAD` has not (`git rev-list --count
 ---HEAD..@{u}`): what a `git pull` would bring. It knows only what the last `git fetch` brought home: no network, no
@@ -163,11 +241,28 @@ M.BEHIND_TIMEOUT_MS = 3000
 ---
 ---`nil` is "nothing to say" and covers git not installed, not a repository, no commit yet, no upstream, a timeout
 ---and anything git answers that is not a number: a warning that cannot be given is silence, never an error.
+---
+---The `.git` files answer first (rules.git_files): HEAD and its upstream at the same commit is 0 without git, and a
+---count git gave is kept for that pair of commits (the count of two commits never changes, so the cache needs no
+---invalidation; a commit, a pull or a fetch is a new pair). Only a new pair, or files git reads in a way the reader does
+---not follow, start `git rev-list`.
 ---@param root string
 ---@return integer|nil behind  commits to pull (0: up to date)
 function M.behind(root)
   if vim.fn.executable("git") ~= 1 then
     return nil
+  end
+  local pair, unsure = require("rules.git_files").upstream(root)
+  if not pair and not unsure then
+    -- no repository, an unborn or detached HEAD, no upstream fetched: what git would fail on too
+    return nil
+  end
+  local key = pair and (pair.head .. ".." .. pair.upstream) or nil
+  if pair and pair.head == pair.upstream then
+    return 0
+  end
+  if key and behind_cache[key] then
+    return behind_cache[key]
   end
   local done = require("lib.nvim.git").run(
     { "rev-list", "--count", "HEAD..@{u}" },
@@ -176,7 +271,15 @@ function M.behind(root)
   if done.timed_out or done.code ~= 0 then
     return nil
   end
-  return tonumber(vim.trim(done.stdout or ""))
+  local count = tonumber(vim.trim(done.stdout or ""))
+  if key and count then
+    behind_cache_size = behind_cache_size + 1
+    if behind_cache_size > 64 then
+      behind_cache, behind_cache_size = {}, 1
+    end
+    behind_cache[key] = count
+  end
+  return count
 end
 
 return M

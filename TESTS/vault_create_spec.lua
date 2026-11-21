@@ -691,6 +691,39 @@ describe(":RulesVault create", function()
       assert.is_true(told("inside another repository"))
     end)
 
+    it("--git plans from the .git files: the only git start is the init", function()
+      local git = require("lib.nvim.git")
+      local original, original_executable = git.run, vim.fn.executable
+      local asked_git = {}
+      git.run = function(args)
+        asked_git[#asked_git + 1] = table.concat(args, " ")
+        return { code = 0, stdout = "", stderr = "" }
+      end
+      vim.fn.executable = function(name)
+        return name == "git" and 1 or original_executable(name)
+      end
+      -- a repository as its files show it, with the vault to be a folder inside it: planned twice (before the question
+      -- and after it), no git asked
+      vim.fn.mkdir(base .. "/.git", "p")
+      local f = assert(io.open(base .. "/.git/HEAD", "wb"))
+      f:write("ref: refs/heads/main\n")
+      f:close()
+      ui(true)
+      local ok, err = pcall(run, "RulesVault create " .. in_command(root) .. " --git")
+      local question = asked[1] and asked[1].question or ""
+      vim.fn.delete(base .. "/.git", "rf")
+      local inside = vim.deepcopy(asked_git)
+      asked_git = {}
+      local ok2, err2 = pcall(run, "RulesVault create " .. in_command(root .. "-2") .. " --yes --git")
+      git.run, vim.fn.executable = original, original_executable
+      assert(ok, err)
+      assert(ok2, err2)
+      assert.is_truthy(question:find("inside", 1, true), question)
+      assert.are.same({}, inside, "a folder inside a repository: no git start, no init")
+      assert.is_true(told("inside another repository"))
+      assert.are.same({ "init" }, asked_git, "a folder of its own: only git init")
+    end)
+
     it("reports a git that fails without losing the files", function()
       local git = require("lib.nvim.git")
       local original = git.run

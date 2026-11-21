@@ -236,6 +236,26 @@ describe(":Rules review", function()
       assert.is_truthy(line_of(buf, "PROPOSED compliant DEP-02"))
     end)
 
+    it("records the commit of the project from its .git files, without starting git", function()
+      local sha = string.rep("c", 40)
+      write_raw(root .. "/.git/HEAD", sha .. "\n")
+      ask_family("DEP")
+      local buf = open()
+      local saved_system = vim.system
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.system = function(argv, ...)
+        if argv[1] == "git" then
+          error("the editor waited for git " .. table.concat(argv, " "))
+        end
+        return saved_system(argv, ...)
+      end
+      local ok, err = pcall(press, buf, "a", "PROPOSED violation DEP-01")
+      vim.system = saved_system
+      assert(ok, err)
+
+      assert.are.equal(sha, verdicts.load(root)["DEP-01"].commit)
+    end)
+
     it("does not accept an unclear proposal", function()
       ask_family("ERR")
       local buf = open()
