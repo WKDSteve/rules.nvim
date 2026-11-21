@@ -217,10 +217,17 @@ describe("rules.vault.behind @spawn", function()
   it("asks git once for a pair of commits, then keeps the count", function()
     local m = machines()
     other_machine_makes_dep03(m)
+    -- a commit no other case has: the commits of `machines()` are the same bytes (author, date to the second), so two
+    -- setups in one second share their ids, and with them a count kept by an earlier case
+    write_raw(m.b .. "/unique.txt", vim.fn.tempname())
+    git(m.b, "add", "-A")
+    git(m.b, "commit", "-q", "-m", "unique")
+    git(m.b, "push", "-q", "origin", "main")
+    git(m.a, "fetch", "-q")
     local starts, counts = counting_git(function()
       return { vault.behind(m.a), vault.behind(m.a .. "/rulesets/lua") }
     end)
-    assert.are.same({ 1, 1 }, counts)
+    assert.are.same({ 2, 2 }, counts)
     assert.are.equal(1, starts, "the count of two commits never changes")
     git(m.a, "pull", "-q", "--ff-only")
     starts, counts = counting_git(function()
