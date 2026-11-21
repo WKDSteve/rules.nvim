@@ -700,7 +700,10 @@ describe("rules-ops/1 waivers: the project", function()
 
     assert.is_true(a.ok, vim.inspect(a))
     assert.is_true(b.ok, vim.inspect(b))
-    assert.are.same({ "DEP-01", "DEP-02" }, vim.tbl_keys(waivers.load_entries(fx.project)))
+    -- vim.tbl_keys follows the hash order, which differs between builds (macOS gave DEP-02 first): sorted
+    local ids = vim.tbl_keys(waivers.load_entries(fx.project))
+    table.sort(ids)
+    assert.are.same({ "DEP-01", "DEP-02" }, ids)
   end)
 
   it("a folder inside a ruleset is refused, also when it is reached through a different spelling", function()
