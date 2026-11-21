@@ -531,6 +531,31 @@ local function by_ruleset(ctx, entries)
   return out
 end
 
+---The line to open a rule at: its heading, which is what `docs/BINDINGS.md` promises, not the line of its ```rule block
+---(`entry.line`, two or more lines below the heading). The nearest heading above the block that names the id; the
+---block's own line when the file has none (or cannot be read).
+---@param entry Rules.Vault.Entry
+---@return integer|nil
+local function heading_line(entry)
+  if not entry.line or not entry.file then
+    return entry.line
+  end
+  local ok, lines = pcall(vim.fn.readfile, entry.file, "", entry.line)
+  if not ok or type(lines) ~= "table" then
+    return entry.line
+  end
+  local found
+  local in_fence = false
+  for i, text in ipairs(lines) do
+    if text:match("^%s*```") or text:match("^%s*~~~") then
+      in_fence = not in_fence
+    elseif not in_fence and text:match("^#+%s") and text:find(entry.id, 1, true) then
+      found = i
+    end
+  end
+  return found or entry.line
+end
+
 ---The folder of a family in each ruleset that has rules of it; where a ruleset keeps its rules in documents (no folder
 ---of the family) the files of its rules.
 ---@param ctx Rules.Vault.Ctx
@@ -557,7 +582,7 @@ local function family_subjects(ctx, family, entries)
       for _, entry in ipairs(group.entries) do
         if not seen[entry.file] then
           seen[entry.file] = true
-          out[#out + 1] = { path = norm(entry.file), dir = false, label = label, line = entry.line }
+          out[#out + 1] = { path = norm(entry.file), dir = false, label = label, line = heading_line(entry) }
         end
       end
     end
@@ -577,7 +602,7 @@ function M.subjects(ctx, target, rs)
     if not entry.file or not is_file(entry.file) then
       return nil, ("the file of %s is gone (%s)"):format(entry.id, tostring(entry.file))
     end
-    return { { path = norm(entry.file), dir = false, label = entry.id, line = entry.line } }, nil
+    return { { path = norm(entry.file), dir = false, label = entry.id, line = heading_line(entry) } }, nil
   elseif target.kind == "family" then
     local out = family_subjects(ctx, target.name, target.entries)
     if #out == 0 then

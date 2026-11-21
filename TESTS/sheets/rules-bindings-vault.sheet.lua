@@ -33,9 +33,8 @@ cmd(
 cmd(
   "RulesVault open DEP-01",
   [[_G.bufpath() == _G.real(_G.fx.lua .. "/_rules/DEP/DEP-01.md")
-    and vim.fn.search("^#### `DEP-01`", "bcnW") >= vim.api.nvim_win_get_cursor(0)[1] - 2
-    and vim.fn.search("^#### `DEP-01`", "bcnW") > 0]],
-  -- docs/BINDINGS.md says "at its heading"; a rule with a check block is opened at its ```rule line, two below
+    and vim.fn.getline("."):match("^#+ .*`DEP%-01`") ~= nil]],
+  -- docs/BINDINGS.md says "at its heading": the cursor stands on the heading line, not on the ```rule block below it
   -- (rules.nvim/rulesvault-open-auf-der-ueberschrift)
   "opens the rule file at the rule"
 )
