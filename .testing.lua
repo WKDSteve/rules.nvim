@@ -68,6 +68,8 @@ return {
       -- the steps that depend on the platform: the hosted windows and macOS legs run only these
       platform = { "suite", "conformance", "contracts" },
       publish = { why = "docmap.nvim checks this repository out to run the rules engine in its standalone gate." },
+      -- `testing ci land`: a check branch ci/** runs the hosted legs, main moves only once it is green there (CI-05)
+      land = true,
     },
     steps = {
       luacheck = { preset = "luacheck", args = { "lua", "TESTS" } },
