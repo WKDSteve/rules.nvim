@@ -562,7 +562,10 @@ describe("rules-export/1 golden files", function()
   end)
 
   it("match the views document and a view_save (a vault with one view, a fixed day)", function()
-    local vault = tmp_dir()
+    -- a fixed folder name: `source.id` is the last part of the vault's path, and the name tempname() gives counts the
+    -- temp files made before, which differ between systems (the golden held 54 on Windows, Linux made 53)
+    local vault = tmp_dir() .. "/vault"
+    vim.fn.mkdir(vault, "p")
     write_raw(vault .. "/rulesets/alpha/_rules/DEP/DEP-01.md", RULE_FILE)
     local opts = { vault = vault, today = "2026-01-01" }
     local view = '{"title":"By severity","display":"columns","group_by":"severity","select":{"families":["DEP"]}}'
