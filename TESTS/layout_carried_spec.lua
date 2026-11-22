@@ -156,6 +156,21 @@ describe("rules-ops/1 and a layout that carries a family", function()
     assert.are.equal(before, read_raw(kurz))
   end)
 
+  it("says the family token carries the rule when the place kept in the retired file no longer fits", function()
+    write_raw(regeln, layout({ "# Regeln", "", "## Err", "", "{{rule ERR-01}}", "{{rule DEP-01}}", "" }, "regeln.md"))
+    local retired = one({ op = "retire", id = "DEP-01" })
+    assert.is_true(retired.ok, vim.inspect(retired))
+    -- the layout the rule stood in takes the whole family now: the kept place is refused there
+    write_raw(regeln, layout({ "# Regeln", "", "## Err", "", "{{rule ERR-01}}", "{{family DEP}}", "" }, "regeln.md"))
+    local back = one({ op = "reinstate", id = "DEP-01" })
+    assert.is_true(back.ok, vim.inspect(back))
+    assert.is_nil(back.placed)
+    local warnings = vim.json.decode(json.encode(back.warnings))
+    local said = "the place kept in the retired file no longer fits: the rule is only in kontext/kurz.md, regeln.md,"
+      .. " by its family token"
+    assert.are.same({ said }, warnings)
+  end)
+
   it("names no carrier for a rule no family token holds", function()
     local retired = one({ op = "retire", id = "ERR-01" })
     local back = one(vim.json.decode(json.encode(retired.inverse)))

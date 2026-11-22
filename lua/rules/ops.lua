@@ -1162,8 +1162,10 @@ local function do_reinstate(op, ctx)
     end
     local target = root .. "/" .. rel
     local entry = { ok = true, id = op.id, changed_ids = {} }
+    entry.carried = carried_by(root, op.id)
     -- no place given: the one `retire` kept in the file, as a hint. A place that no longer fits (a layout or an anchor
-    -- gone, a section renamed) is told and left out: the rule comes back in no layout, as without a hint
+    -- gone, a section renamed, a family token that carries the rule now) is told and left out: the rule comes back in
+    -- no layout as without a hint, or only in the layouts whose token carries it
     if #wheres == 0 and hint and hint ~= "" then
       local places = hint_places(op.id, hint)
       local fits = false
@@ -1176,7 +1178,9 @@ local function do_reinstate(op, ctx)
         end
       end
       if not fits then
-        entry.warnings = json.array({ "the place kept in the retired file no longer fits: the rule is in no layout" })
+        local where = entry.carried and ("only in " .. table.concat(entry.carried, ", ") .. ", by its family token")
+          or "in no layout"
+        entry.warnings = json.array({ "the place kept in the retired file no longer fits: the rule is " .. where })
       end
     end
     local text = table.concat(kept, "\n")
@@ -1184,7 +1188,6 @@ local function do_reinstate(op, ctx)
     if not rule or #rerrs > 0 then
       return refuse("invalid_argument", "the retired file would not read as a rule: " .. tostring((rerrs or {})[1] or "unknown"))
     end
-    entry.carried = carried_by(root, op.id)
     if ctx.dry then
       -- the target and the placement are checked too: a dry run that says "yes" must not fail on them
       if vim.uv.fs_stat(target) then
