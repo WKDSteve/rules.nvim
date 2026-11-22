@@ -367,7 +367,7 @@ document with rules, or the `output` of another layout (the first layout, in
 path order, gets it; each other one is an error). A layout that breaks one of
 these gets the status `error`, nothing is written for it, and the exit code is 1.
 
-The body is the document as it reads, and two kinds of **whole-line** tokens are
+The body is the document as it reads, and **whole-line** tokens are
 replaced; everything else (headings, introductions, separators, notes) is
 copied as written. Whitespace after a token is ignored (editors leave it there);
 whitespace before it makes the line text. A `{{toc ...}}` line is at most 256
@@ -377,9 +377,71 @@ bytes.
 | --- | --- |
 | `{{rule ID}}` | the rule as it reads in the document: its heading and text, and a ` ```rule ` block with `id` and `severity` put back in (and the rest of the block, if the file has one). The order of the tokens is the order in the document; a rule file carries no order. A rule placed twice, or an id with no rule file, is an error and nothing is written |
 | `{{toc}}` | the table of contents of the finished document |
+| `{{brief ID}}` | the rule in its **brief form**, one list item (see below) |
+| `{{family FAM}}` | every rule file of the family `FAM`, each as `{{rule ID}}` would put it, in the order of their numbers (`DEP-2` before `DEP-10`). A new rule of the family shows up without a change to the layout |
+| `{{family FAM brief}}` | the same, each rule in its brief form |
+| `{{refer FAM}}` | nothing: the family counts as placed (for `families: all`), but brings no lines. The layout says in its own words where the family is read, for a family that matters only to some work |
 
 A rule file without a block gets one: right under its heading and the blank
 lines below it. A rule file *with* a block keeps it where it is.
+
+A family placed twice in one layout (also once by `{{family}}` and once by
+`{{refer}}`), a rule placed by its family and by its own token, and a family with
+no rule file are errors, and nothing is written.
+
+**The brief form** is for a compact document an agent loads into every session,
+where every line costs: the rule as one list item, its id, its title and its
+rule paragraphs, without reason and evidence:
+
+```markdown
+- `GIT-01` **Fertig heißt gepusht**: Ist eine Aufgabe fertig, sofort pushen.
+  Zweiter Absatz, zu einer Zeile verbunden.
+  - eine Liste behält ihre Zeilen
+```
+
+The title is the heading without a leading `` `ID` — ``. The text is what stands
+under the heading (the ` ```rule ` block left out) up to the first paragraph that
+starts with `Begründung:` or `Beleg:`, a `---` line or the next heading. A
+paragraph of prose is joined to one line; a list (`-`, `*`, `1.`) keeps its
+lines, indented by two. A fenced block in the rule text is an error (the brief
+form has no place for it, and leaving it out would cut the rule short): move it
+below `Begründung:`/`Beleg:` or write it inline. A rule with no text before its
+reason is an error too.
+
+**Two more frontmatter keys** make a set of compact documents something a tool
+can rely on:
+
+````markdown
+---
+kind: layout
+output: kontext/arbeit-git.md
+folder: kontext
+families: all
+---
+# Arbeitsregeln: Git
+
+{{family GIT brief}}
+
+## Lernpfade
+
+{{refer LP}}
+- `LP-01`..`LP-18`: before a learning path, read `regeln/LERNPLAENE.md`.
+````
+
+- `families: all` (the only value): the layouts that say it hold every family of
+  the ruleset together, each exactly once, by `{{family}}` or `{{refer}}`.
+  A family in none of them is reported on the first of them, one in two of them
+  on the second; both make `:Rules catalog` (and `--check`) end with exit code 1.
+  So a new family cannot miss the compact documents. Layouts without the key
+  (the reading documents) are not counted.
+- `folder: <path>`: the `output` lies inside this folder, and the folder holds
+  the outputs of the layouts that name it (or a folder inside it) and nothing
+  else, so a tool may take every file in it (setup-claude-code links each one
+  into `~/.claude/rules`). A generated document there that no layout makes any
+  more is removed by `:Rules catalog` (status `removed`), but only when the
+  build had no error (a broken layout made nothing, so its document is kept);
+  `--check` reports it as `stale`. Any other file in the folder (written by
+  hand, not Markdown) is an error and is never touched.
 
 The generator copies the lines of a rule file as they are, so what separates two
 rules in a document is in the rule file: a blank line, `---` and a blank line at
@@ -394,7 +456,11 @@ section). A section with no rule token has only an introduction, which is not a
 rule, so the new token goes behind it (also for "first", and for a section whose
 tokens all stand in subsections), between one blank line before and one after;
 the introduction stays above the rules. Two sections with the same heading are
-told apart by a number (`nth`, the first by default).
+told apart by a number (`nth`, the first by default). The editor knows only
+`{{rule ID}}` lines: a rule of a family that a layout holds by `{{family FAM}}`
+is in that layout already, so a `{{rule ID}}` put next to it there would place
+it twice (the generator says so); place it in another layout, or let the family
+token carry it.
 
 **What the editor takes for a heading or a token.** Only a line outside the
 frontmatter, outside a fenced code block and outside an HTML comment. A fence

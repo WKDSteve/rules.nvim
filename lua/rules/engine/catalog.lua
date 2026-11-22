@@ -11,8 +11,16 @@
 --- `output: <path of the document, relative to the ruleset root>`. Its body is
 --- the document as it should read, with two kinds of lines taken for tokens:
 ---
----     {{rule DEP-06}}   replaced by the rule, as it reads in the document
----     {{toc}}           replaced by the table of contents of the finished document
+---     {{rule DEP-06}}         replaced by the rule, as it reads in the document
+---     {{toc}}                 replaced by the table of contents of the finished document
+---     {{brief DEP-06}}        the rule in its brief form: one list item, id, title, rule text (`M.brief_lines`)
+---     {{family DEP}}          every rule file of the family, in the order of the numbers (`{{family DEP brief}}`:
+---                             each in its brief form)
+---     {{refer DEP}}           nothing; the family counts as placed (`families: all`)
+---
+--- Two optional frontmatter keys: `families: all` (the layouts that say it hold every family of the ruleset, each
+--- exactly once) and `folder: <path>` (the output lies in it, and nothing but the outputs of its layouts may: a
+--- stale generated document there is removed).
 ---
 --- A token is the whole line; whitespace after it is ignored, whitespace before it
 --- makes the line text. Everything else (headings, introductions, separators) is
@@ -240,6 +248,9 @@ end
 ---@class Rules.Layout
 ---@field output string  path of the document, relative to the ruleset root, with `/`
 ---@field lines string[]  the body, one entry per line
+---@field folder string|nil  a folder of generated documents only: nothing but the outputs of the layouts that name it
+---   (or a folder inside it) may lie in it
+---@field families "all"|nil  every family of the ruleset stands in exactly one of the layouts that say this
 
 --- Is `path` a place a layout may write to: relative, inside the root, a file name that is valid on every system?
 --- (The spelling only: that no link on the way leads out of the root is checked where the file is written.)
@@ -284,11 +295,26 @@ function M.parse_layout(text)
   if not ok then
     return nil, why
   end
+  local families = parsed.meta.families
+  if families ~= nil and families ~= "all" then
+    return nil, "`families` can only be `all` (every family of the ruleset stands in one such layout)"
+  end
+  local folder = parsed.meta.folder
+  if folder ~= nil then
+    -- the same spelling rules as `output`, checked on a file name inside it
+    local folder_ok = type(folder) == "string" and safe_output(folder .. "/x.md")
+    if not folder_ok then
+      return nil, "`folder` must be a relative path with `/` inside the ruleset"
+    end
+    if parsed.meta.output:sub(1, #folder + 1) ~= folder .. "/" then
+      return nil, ("`output` %s is not inside `folder` %s"):format(parsed.meta.output, folder)
+    end
+  end
   local body = vim.split(parsed.body, "\n", { plain = true })
   if body[#body] == "" then
     body[#body] = nil
   end
-  return { output = parsed.meta.output, lines = body }, nil
+  return { output = parsed.meta.output, lines = body, folder = folder, families = families }, nil
 end
 
 -- ── one rule in the document ─────────────────────────────────────────────────
@@ -333,6 +359,173 @@ function M.segment_lines(rule_file)
   return out
 end
 
+-- ── one rule in its brief form ───────────────────────────────────────────────
+
+--- Does this paragraph start the reason or the evidence of a rule (where the brief form ends)?
+---@param line string
+---@return boolean
+local function is_reason(line)
+  return line:sub(1, #"Begründung:") == "Begründung:" or line:sub(1, #"Beleg:") == "Beleg:"
+end
+
+--- One paragraph as it stands in a list item: prose joined to one line, a list kept as its lines (indented by two).
+---@param para string[]
+---@param first boolean  the first paragraph goes on the item's own line, unindented
+---@return string[]
+local function brief_paragraph(para, first)
+  if para[1]:match("^%s*[-*] ") or para[1]:match("^%s*%d+%. ") then
+    local out = {}
+    for _, line in ipairs(para) do
+      out[#out + 1] = "  " .. line
+    end
+    return out
+  end
+  local words = {}
+  for _, line in ipairs(para) do
+    words[#words + 1] = vim.trim(line)
+  end
+  local text = table.concat(words, " ")
+  return { first and text or ("  " .. text) }
+end
+
+--- How a rule reads in a compact document (what an agent loads into every session): one list item with its id, its
+--- title and its rule paragraphs, the text under the heading up to the first paragraph that starts with
+--- `Begründung:` or `Beleg:` (or a `---` line, or the next heading). Prose is joined to one line, a list keeps its
+--- lines. The title is the heading without a leading `` `ID` — ``. A fenced block in the rule text is an error: the
+--- brief form has no place for it, and dropping it would silently cut the rule short.
+---@param rule_file Rules.RuleFile
+---@return string[]|nil lines
+---@return string|nil err
+function M.brief_lines(rule_file)
+  local lines = rule_file.lines
+  if not rule_file.heading then
+    return nil, "no heading that names the rule"
+  end
+  local heading_text = lines[rule_file.heading]:match("^#+%s+(.*)$") or ""
+  heading_text = heading_text:sub(1, last_non_space(heading_text))
+  local tick = "`" .. rule_file.id .. "`"
+  local title = heading_text
+  if heading_text:sub(1, #tick) == tick then
+    title = heading_text:sub(#tick + 1):match("^%s+—%s+(.*)$") or heading_text
+  end
+  local block = rule_file.block
+  local paras, para = {}, {}
+  local in_fence, in_reason, fence_in_rule = false, false, false
+  for i = rule_file.heading + 1, #lines do
+    local line = lines[i]
+    local text = true
+    if block and i >= block.s and i <= block.e then
+      -- the ```rule block is the rule's identity, not its text
+      text = false
+    elseif line:match("^%s*```") then
+      in_fence = not in_fence
+      fence_in_rule = fence_in_rule or not in_reason
+      text = false
+    elseif in_fence then
+      text = false
+    end
+    if text then
+      if #para == 0 and is_reason(line) then
+        in_reason = true
+      end
+      if line == "---" or line:match("^#+%s") and #line:match("^(#+)") <= 6 then
+        break
+      elseif not line:find("%S") then
+        if #para > 0 then
+          paras[#paras + 1] = para
+          para = {}
+        end
+      else
+        para[#para + 1] = line
+      end
+    end
+  end
+  if #para > 0 then
+    paras[#paras + 1] = para
+  end
+  local out = {}
+  for _, p in ipairs(paras) do
+    if is_reason(p[1]) then
+      break
+    end
+    for _, l in ipairs(brief_paragraph(p, #out == 0)) do
+      out[#out + 1] = l
+    end
+  end
+  if #out == 0 then
+    return nil, "no rule text before `Begründung:`/`Beleg:`"
+  end
+  if fence_in_rule then
+    return nil, "a fenced block in the rule text has no place in the brief form; move it below `Begründung:`/`Beleg:`"
+  end
+  local item = ("- `%s` **%s**:"):format(rule_file.id, title)
+  if out[1]:sub(1, 2) == "  " then
+    -- a list as the first paragraph keeps its lines under the item line
+    table.insert(out, 1, item)
+  else
+    out[1] = item .. " " .. out[1]
+  end
+  return out, nil
+end
+
+-- ── tokens ───────────────────────────────────────────────────────────────────
+
+---@class Rules.LayoutToken
+---@field kind "rule"|"brief"|"family"|"refer"
+---@field name string  the rule id (`rule`, `brief`) or the family (`family`, `refer`)
+---@field brief boolean|nil  `{{family FAM brief}}`
+
+--- Read a rule or family token: `{{rule ID}}`, `{{brief ID}}`, `{{family FAM}}`, `{{family FAM brief}}`,
+--- `{{refer FAM}}`. The token is the whole line; whitespace after it is ignored. Not the table of contents.
+---@param line string
+---@return Rules.LayoutToken|nil
+function M.parse_token(line)
+  local bare = line:sub(1, last_non_space(line))
+  if bare:sub(1, 2) ~= "{{" or bare:sub(-2) ~= "}}" or #bare > TOC_MAX_BYTES then
+    return nil
+  end
+  local word, name, rest = bare:match("^{{(%l+)%s+([^%s}]+)%s*(%l*)%s*}}$")
+  if not word then
+    return nil
+  end
+  if (word == "rule" or word == "brief" or word == "refer") and rest == "" then
+    return { kind = word, name = name }
+  end
+  if word == "family" and (rest == "" or rest == "brief") then
+    return { kind = "family", name = name, brief = rest == "brief" }
+  end
+  return nil
+end
+
+--- The number of a rule id, for the order inside a family (`DEP-06` -> 6).
+---@param id string
+---@return number
+local function id_number(id)
+  return tonumber(id:match("%-(%d+)$")) or math.huge
+end
+
+--- The rule files of a ruleset grouped by family, each list in the order of the numbers.
+---@param ids string[]
+---@return table<string, string[]>
+function M.families_of(ids)
+  local out = {}
+  for _, id in ipairs(ids) do
+    local family = parser.family_of(id)
+    out[family] = out[family] or {}
+    table.insert(out[family], id)
+  end
+  for _, list in pairs(out) do
+    table.sort(list, function(a, b)
+      local na, nb = id_number(a), id_number(b)
+      if na ~= nb then
+        return na < nb
+      end
+      return a < b
+    end)
+  end
+  return out
+end
+
 -- ── the document ─────────────────────────────────────────────────────────────
 
 ---@alias Rules.RuleFileLookup fun(id: string): Rules.RuleFile|nil, string|nil
@@ -341,21 +534,57 @@ end
 ---@param layout Rules.Layout
 ---@param lookup Rules.RuleFileLookup  the rule file of an id, or `nil, why`
 ---@param header string|nil  first line of the output
+---@param families table<string, string[]>|nil  the rule files of each family, in order (`M.families_of`); without it
+---   a `{{family}}` or `{{refer}}` token names no rule
 ---@return string|nil text  `"\n"` line endings, ends with a newline
 ---@return string[] problems  one per token that could not be filled
 ---@return string[] used  the ids that were put in, in order
-function M.render(layout, lookup, header)
+---@return string[] placed  the families placed by `{{family}}` or `{{refer}}`, in order
+function M.render(layout, lookup, header, families)
+  families = families or {}
   local out = {}
   local problems = {}
   local used = {}
   local seen = {}
+  local placed, placed_at = {}, {}
   local toc_at, toc_params
   if header then
     out[1] = header
   end
+
+  ---@param n integer  the layout line
+  ---@param id string
+  ---@param brief boolean
+  local function put(n, id, brief)
+    if seen[id] then
+      problems[#problems + 1] = ("layout line %d: rule %s is placed twice (line %d)"):format(n, id, seen[id])
+      return
+    end
+    seen[id] = n
+    local rule_file, why = lookup(id)
+    if not rule_file then
+      problems[#problems + 1] = ("layout line %d: rule %s: %s"):format(n, id, why or "not found")
+      return
+    end
+    local lines, err
+    if brief then
+      lines, err = M.brief_lines(rule_file)
+    else
+      lines = M.segment_lines(rule_file)
+    end
+    if not lines then
+      problems[#problems + 1] = ("layout line %d: rule %s: %s"):format(n, id, err)
+      return
+    end
+    used[#used + 1] = id
+    for _, seg in ipairs(lines) do
+      out[#out + 1] = seg
+    end
+  end
+
   for n, line in ipairs(layout.lines) do
     -- trailing whitespace (an editor's leftover) does not stop a token from being one; the line is copied as it is
-    local id = line:sub(1, last_non_space(line)):match("^{{rule%s+([^%s}]+)%s*}}$")
+    local token = M.parse_token(line)
     local params, params_err = M.parse_toc_token(line)
     if params_err then
       problems[#problems + 1] = ("layout line %d: %s"):format(n, params_err)
@@ -367,19 +596,26 @@ function M.render(layout, lookup, header)
         toc_params = params
         out[toc_at] = false
       end
-    elseif id then
-      if seen[id] then
-        problems[#problems + 1] = ("layout line %d: rule %s is placed twice"):format(n, id)
+    elseif token and (token.kind == "rule" or token.kind == "brief") then
+      put(n, token.name, token.kind == "brief")
+    elseif token then
+      local ids = families[token.name]
+      if not ids then
+        problems[#problems + 1] = ("layout line %d: family %s has no rule file"):format(n, token.name)
+      elseif placed_at[token.name] then
+        problems[#problems + 1] = ("layout line %d: family %s is placed twice (line %d)"):format(
+          n,
+          token.name,
+          placed_at[token.name]
+        )
       else
-        seen[id] = true
-        local rule_file, why = lookup(id)
-        if rule_file then
-          used[#used + 1] = id
-          for _, seg in ipairs(M.segment_lines(rule_file)) do
-            out[#out + 1] = seg
+        placed_at[token.name] = n
+        placed[#placed + 1] = token.name
+        -- `{{refer FAM}}` places the family without its rules: the layout says in its own words where it is read
+        if token.kind == "family" then
+          for _, id in ipairs(ids) do
+            put(n, id, token.brief == true)
           end
-        else
-          problems[#problems + 1] = ("layout line %d: rule %s: %s"):format(n, id, why or "not found")
         end
       end
     else
@@ -387,7 +623,7 @@ function M.render(layout, lookup, header)
     end
   end
   if #problems > 0 then
-    return nil, problems, used
+    return nil, problems, used, placed
   end
   if toc_at then
     local rest = {}
@@ -409,7 +645,7 @@ function M.render(layout, lookup, header)
     end
     out = with_toc
   end
-  return table.concat(out, "\n") .. "\n", {}, used
+  return table.concat(out, "\n") .. "\n", {}, used, placed
 end
 
 --- The header line of a generated document.
@@ -460,7 +696,7 @@ end
 ---@class Rules.CatalogResult
 ---@field layout string  the layout file
 ---@field output string  the document it makes
----@field status "written"|"unchanged"|"stale"|"error"
+---@field status "written"|"unchanged"|"stale"|"removed"|"error"  `removed`: a stale document of a `folder`
 ---@field problems string[]
 ---@field unused string[]|nil  rule ids that are in the ruleset but in no layout (set on the first result only)
 
@@ -553,7 +789,20 @@ function M.build(root, opts)
     return nil
   end
 
+  -- a family token names the rule files of the family (a rule in a document is in that document already)
+  local file_ids = {}
+  for _, rule in ipairs(rules) do
+    if kinds[rule.source_file] == "rule" then
+      file_ids[#file_ids + 1] = rule.id
+    end
+  end
+  local families = M.families_of(file_ids)
+
   local placed = {}
+  local family_home = {} ---@type table<string, string> family -> the `families: all` layout it stands in
+  local all_results = {} ---@type Rules.CatalogResult[] the results of the `families: all` layouts
+  local folders = {} ---@type table<string, string> folder -> the first layout that names it
+  local in_folder = {} ---@type {folder: string, key: string}[] the outputs of the layouts with a `folder`
   for _, layout_path in ipairs(layouts) do
     local rel = layout_path:sub(#base + 2)
     local result = { layout = layout_path, output = "", status = "error", problems = {} }
@@ -564,13 +813,31 @@ function M.build(root, opts)
       result.problems[1] = ("%s: %s"):format(rel, why)
     else
       result.output = base .. "/" .. layout.output
-      local rendered, problems, used = M.render(layout, lookup, M.header(rel))
+      if layout.folder then
+        folders[layout.folder] = folders[layout.folder] or layout_path
+        in_folder[#in_folder + 1] = { folder = layout.folder, key = path_key(result.output) }
+      end
+      local rendered, problems, used, placed_families = M.render(layout, lookup, M.header(rel), families)
       for _, id in ipairs(used) do
         placed[id] = true
       end
+      if layout.families == "all" then
+        all_results[#all_results + 1] = result
+        for _, family in ipairs(placed_families) do
+          if family_home[family] then
+            result.problems[#result.problems + 1] = ("%s: family %s stands in %s already"):format(
+              rel,
+              family,
+              family_home[family]
+            )
+          else
+            family_home[family] = rel
+          end
+        end
+      end
       local refusal = output_refusal(rel, layout.output, result.output)
       if refusal then
-        result.problems[1] = refusal
+        table.insert(result.problems, 1, refusal)
       end
       if not rendered then
         for _, p in ipairs(problems) do
@@ -596,6 +863,74 @@ function M.build(root, opts)
             result.status = "written"
           else
             result.problems[1] = ("%s: %s"):format(result.output, write_err)
+          end
+        end
+      end
+    end
+  end
+
+  -- `families: all`: the layouts that say it together hold every family of the ruleset, each exactly once (twice is
+  -- said above), so a new family cannot miss them
+  if all_results[1] then
+    local names = vim.tbl_keys(families)
+    table.sort(names)
+    for _, family in ipairs(names) do
+      if not family_home[family] then
+        local first = all_results[1]
+        first.problems[#first.problems + 1] = ("family %s stands in no layout with `families: all` (%s)"):format(
+          family,
+          first.layout:sub(#base + 2)
+        )
+      end
+    end
+  end
+
+  -- `folder`: the folder holds the outputs of the layouts that name it (or a folder inside it) and nothing else (a
+  -- tool may take every file in it, as setup-claude-code links each one into ~/.claude/rules). A stale generated
+  -- document is removed when the build had no error (a broken layout made nothing, so its document is kept); any
+  -- other file is said.
+  local folder_names = vim.tbl_keys(folders)
+  table.sort(folder_names)
+  local had_error = false
+  for _, result in ipairs(results) do
+    had_error = had_error or result.status == "error" or #result.problems > 0
+  end
+  for _, folder in ipairs(folder_names) do
+    local owned = {}
+    for _, entry in ipairs(in_folder) do
+      if entry.folder == folder or entry.folder:sub(1, #folder + 1) == folder .. "/" then
+        owned[entry.key] = true
+      end
+    end
+    local dir = base .. "/" .. folder
+    local files = {}
+    if vim.fn.isdirectory(dir) == 1 then
+      for name, ftype in vim.fs.dir(dir, { depth = math.huge }) do
+        if ftype ~= "directory" then
+          files[#files + 1] = dir .. "/" .. name:gsub("\\", "/")
+        end
+      end
+    end
+    table.sort(files)
+    for _, file in ipairs(files) do
+      if not owned[path_key(file)] then
+        local rel = file:sub(#base + 2)
+        local result = { layout = folders[folder], output = file, status = "error", problems = {} }
+        results[#results + 1] = result
+        local text = read_file(file) or ""
+        if not file:match("%.md$") or not is_generated(text) or protected[path_key(file)] then
+          result.problems[1] = ("%s is in `folder` %s, which holds generated documents only; move it"):format(rel, folder)
+        elseif opts.check then
+          result.status = "stale"
+          result.problems[1] = ("%s is made by no layout of `folder` %s (run :Rules catalog to remove it)"):format(rel, folder)
+        elseif had_error then
+          result.problems[1] = ("%s is made by no layout of `folder` %s; kept, as the build had errors"):format(rel, folder)
+        else
+          local ok_remove, remove_err = os.remove(file)
+          if ok_remove then
+            result.status = "removed"
+          else
+            result.problems[1] = ("%s: %s"):format(rel, remove_err)
           end
         end
       end

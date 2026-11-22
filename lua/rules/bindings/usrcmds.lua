@@ -262,7 +262,7 @@ function M.setup()
         ---@return string[] stale
         local function report(check)
           local results, errors, code = require("rules").catalog(ctx.args.path, { check = check })
-          local counts = { written = 0, unchanged = 0, stale = 0, error = 0 }
+          local counts = { written = 0, unchanged = 0, stale = 0, removed = 0, error = 0 }
           local stale = {}
           for _, result in ipairs(results) do
             counts[result.status] = counts[result.status] + 1
@@ -286,6 +286,10 @@ function M.setup()
             counts.stale,
             counts.error
           )
+          if counts.removed > 0 then
+            -- a stale document of a layout `folder` (only then, so the usual line stays as it was)
+            summary = summary .. (", %d removed"):format(counts.removed)
+          end
           if code == 0 then
             notify.info(summary)
           else
