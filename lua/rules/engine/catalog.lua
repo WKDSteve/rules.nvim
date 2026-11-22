@@ -18,6 +18,10 @@
 ---                             each in its brief form)
 ---     {{refer DEP}}           nothing; the family counts as placed (`families: all`)
 ---
+--- One token is **inline** (it may stand anywhere in a line of text): `{{range DEP}}` becomes the ids of the family as
+--- a range, `DEP-01`..`DEP-20` in code spans (`M.range_text`); a gap in the numbers (a retired rule) splits it into
+--- several ranges. It counts nothing as placed.
+---
 --- Two optional frontmatter keys: `families: all` (the layouts that say it hold every family of the ruleset, each
 --- exactly once) and `folder: <path>` (the output lies in it, and nothing but the outputs of its layouts may: a
 --- stale generated document there is removed).
@@ -504,6 +508,29 @@ local function id_number(id)
   return tonumber(id:match("%-(%d+)$")) or math.huge
 end
 
+--- The ids of one family as the text `{{range FAM}}` becomes: runs of consecutive numbers as `A`..`B` in code spans, a
+--- lone number as `A`, the runs joined by `, `. A gap shows as a split, never as a silent range over it.
+---@param ids string[]  the family's ids, in order of the numbers (`M.families_of`)
+---@return string
+function M.range_text(ids)
+  local runs = {}
+  local prev
+  for _, id in ipairs(ids) do
+    local n = id_number(id)
+    if prev and n == prev.n + 1 then
+      prev.last, prev.n = id, n
+    else
+      prev = { first = id, last = id, n = n }
+      runs[#runs + 1] = prev
+    end
+  end
+  local out = {}
+  for _, run in ipairs(runs) do
+    out[#out + 1] = run.first == run.last and ("`%s`"):format(run.first) or ("`%s`..`%s`"):format(run.first, run.last)
+  end
+  return table.concat(out, ", ")
+end
+
 --- The rule files of a ruleset grouped by family, each list in the order of the numbers.
 ---@param ids string[]
 ---@return table<string, string[]>
@@ -619,7 +646,16 @@ function M.render(layout, lookup, header, families)
         end
       end
     else
-      out[#out + 1] = line
+      -- `{{range FAM}}` stands inside a line of text; an unknown family is a problem, not a literal token
+      local text = line:gsub("{{range%s+([^%s}]+)%s*}}", function(fam)
+        local ids = families[fam]
+        if not ids then
+          problems[#problems + 1] = ("layout line %d: {{range %s}}: family %s has no rule file"):format(n, fam, fam)
+          return ""
+        end
+        return M.range_text(ids)
+      end)
+      out[#out + 1] = text
     end
   end
   if #problems > 0 then

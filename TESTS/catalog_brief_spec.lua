@@ -320,3 +320,46 @@ describe("rules.engine.catalog.build of compact documents", function()
     assert.are.equal(3, #rules)
   end)
 end)
+
+describe("rules.engine.catalog {{range FAM}}", function()
+  ---@param ids integer[]  numbers of the LP rules
+  ---@return string root
+  local function ruleset(ids)
+    local root = tmp_dir()
+    for _, n in ipairs(ids) do
+      local id = ("LP-%02d"):format(n)
+      write(root .. "/_rules/LP/" .. id .. ".md", rule_text(id, ("#### `%s` — T\n\nText.\n"):format(id)))
+    end
+    write(
+      root .. "/_kontext/a.md",
+      layout_text({ "output: kontext/a.md" }, { "{{refer LP}}", "- {{range LP}} **Lernen**: lies LP.md ({{range LP}})." })
+    )
+    return root
+  end
+
+  it("writes the range inside a line, and a new rule moves it; check calls the old text stale", function()
+    local root = ruleset({ 1, 2, 3 })
+    assert.are.same({}, problems_of((catalog.build(root))))
+    local head = catalog.header("_kontext/a.md") .. "\n"
+    assert.are.equal(head .. "- `LP-01`..`LP-03` **Lernen**: lies LP.md (`LP-01`..`LP-03`).\n", read(root .. "/kontext/a.md"))
+
+    write(root .. "/_rules/LP/LP-04.md", rule_text("LP-04", "#### `LP-04` — T\n\nText.\n"))
+    assert.are.equal("stale", catalog.build(root, { check = true })[1].status)
+    catalog.build(root)
+    assert.is_truthy(read(root .. "/kontext/a.md"):find("`LP-01`..`LP-04` **Lernen**", 1, true))
+  end)
+
+  it("shows a gap (a retired rule) as a split and a lone rule as itself", function()
+    assert.are.equal("`LP-01`..`LP-02`, `LP-04`", catalog.range_text({ "LP-01", "LP-02", "LP-04" }))
+    assert.are.equal("`LP-01`, `LP-03`", catalog.range_text({ "LP-01", "LP-03" }))
+    assert.are.equal("`LP-07`", catalog.range_text({ "LP-07" }))
+  end)
+
+  it("is a problem for a family with no rule file, and writes nothing", function()
+    local root = ruleset({ 1 })
+    write(root .. "/_kontext/b.md", layout_text({ "output: kontext/b.md" }, { "x {{range NOPE}} y" }))
+    local results = catalog.build(root)
+    assert.is_truthy(table.concat(problems_of(results), "\n"):find("{{range NOPE}}", 1, true))
+    assert.is_nil(read(root .. "/kontext/b.md"))
+  end)
+end)

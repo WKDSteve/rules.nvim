@@ -381,6 +381,7 @@ bytes.
 | `{{family FAM}}` | every rule file of the family `FAM`, each as `{{rule ID}}` would put it, in the order of their numbers (`DEP-2` before `DEP-10`). A new rule of the family shows up without a change to the layout |
 | `{{family FAM brief}}` | the same, each rule in its brief form |
 | `{{refer FAM}}` | nothing: the family counts as placed (for `families: all`), but brings no lines. The layout says in its own words where the family is read, for a family that matters only to some work |
+| `{{range FAM}}` | **inline**, anywhere in a line of text (not a whole-line token): the ids of the family as a range, `` `LP-01`..`LP-20` ``. A gap in the numbers (a retired rule) splits it (`` `LP-01`..`LP-05`, `LP-07`..`LP-20` ``) instead of hiding it. A family with no rule file is an error. A new rule moves the range, so `--check` calls a hand-kept range stale |
 
 A rule file without a block gets one: right under its heading and the blank
 lines below it. A rule file *with* a block keeps it where it is.
@@ -425,7 +426,7 @@ families: all
 ## Lernpfade
 
 {{refer LP}}
-- `LP-01`..`LP-18`: before a learning path, read `regeln/LERNPLAENE.md`.
+- {{range LP}}: before a learning path, read `regeln/LERNPLAENE.md`.
 ````
 
 - `families: all` (the only value): the layouts that say it hold every family of
