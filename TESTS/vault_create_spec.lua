@@ -4,6 +4,7 @@
 -- The command is run as a user types it (`vim.cmd("RulesVault create ...")`). The question is answered by the spec
 -- (`rules.ui.confirm.choose` is replaced), the clipboard is a seam, `vim.ui.input` is replaced: nothing opens.
 ---@diagnostic disable: need-check-nil
+local no_toast = dofile(vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2))) .. "/helpers/no_toast.lua")
 local config = require("rules.config")
 local settings = require("rules.settings")
 local contract = require("rules.contract")
@@ -125,6 +126,7 @@ describe(":RulesVault create", function()
     root = base .. "/rules-vault"
     notes, copied, asked, typed = {}, {}, {}, {}
     answer = 2
+    no_toast.block()
     vim.notify = function(msg, level)
       notes[#notes + 1] = { text = tostring(msg), level = level }
     end
@@ -144,6 +146,7 @@ describe(":RulesVault create", function()
   end)
 
   after_each(function()
+    no_toast.restore()
     vim.notify, vim.api.nvim_list_uis, vim.ui.input = saved_notify, saved_uis, saved_input
     confirm.choose, scaffold.template_path = saved_choose, saved_template
     cmd.copy = nil

@@ -4,6 +4,7 @@
 -- checked is the buffer-local key map (`nvim_buf_get_keymap`), what a key does, and the two texts that name the keys (the
 -- hint under the title and `g?`). The unit specs of the option itself are in `config_spec.lua`.
 ---@diagnostic disable: need-check-nil
+local no_toast = dofile(vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2))) .. "/helpers/no_toast.lua")
 local config = require("rules.config")
 local ui = require("rules.ui.form")
 local confirm = require("rules.ui.confirm")
@@ -80,6 +81,7 @@ describe("the keys of the :Rules new form", function()
     saved_ignore = vim.o.eventignore
     vim.o.eventignore = "FileType,Syntax"
     notes, submitted = {}, {}
+    no_toast.block()
     vim.notify = function(msg)
       notes[#notes + 1] = tostring(msg)
     end
@@ -87,6 +89,7 @@ describe("the keys of the :Rules new form", function()
   end)
 
   after_each(function()
+    no_toast.restore()
     vim.notify = saved_notify
     confirm.choose = original_choose
     vim.o.eventignore = saved_ignore

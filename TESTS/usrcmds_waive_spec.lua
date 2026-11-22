@@ -6,6 +6,7 @@
 -- beside it. The clock is the `waivers.clock` seam and every date is in 2030 or later: nothing here depends on the real
 -- day. A spec that asks a question answers it itself (`rules.ui.confirm.choose` is replaced).
 ---@diagnostic disable: need-check-nil
+local no_toast = dofile(vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2))) .. "/helpers/no_toast.lua")
 local contract = require("rules.contract")
 local confirm = require("rules.ui.confirm")
 local waivers = require("rules.engine.waivers")
@@ -167,6 +168,7 @@ describe(":Rules waive, renew, unwaive", function()
       return TODAY
     end
     notes = {}
+    no_toast.block()
     vim.notify = function(msg, level)
       notes[#notes + 1] = { text = tostring(msg), level = level }
     end
@@ -178,6 +180,7 @@ describe(":Rules waive, renew, unwaive", function()
   end)
 
   after_each(function()
+    no_toast.restore()
     vim.notify = saved_notify
     vim.api.nvim_list_uis = saved_uis
     confirm.choose = original_choose

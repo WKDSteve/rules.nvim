@@ -4,6 +4,7 @@
 -- transport is the `rules.agent.transport` seam: nothing here reaches a model. A spec that is asked a question answers
 -- it itself (`rules.ui.confirm.choose` is replaced).
 ---@diagnostic disable: need-check-nil
+local no_toast = dofile(vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2))) .. "/helpers/no_toast.lua")
 local contract = require("rules.contract")
 local confirm = require("rules.ui.confirm")
 local agent = require("rules.agent")
@@ -121,6 +122,7 @@ describe(":Rules agent", function()
     agent.cache_dir = base .. "/cache"
     notes, calls, log, asked = {}, {}, {}, {}
     reply = violation_answer()
+    no_toast.block()
     vim.notify = function(msg, level)
       notes[#notes + 1] = { text = tostring(msg), level = level }
       log[#log + 1] = "note"
@@ -142,6 +144,7 @@ describe(":Rules agent", function()
   end)
 
   after_each(function()
+    no_toast.restore()
     vim.notify = saved_notify
     vim.api.nvim_list_uis = saved_uis
     confirm.choose = original_choose

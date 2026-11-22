@@ -5,6 +5,7 @@
 -- clipboard, the explorer, the picker, the list to pick from and the window of the tree are the seams of
 -- `rules.ui.vault_cmd`: a spec reads what went through them, nothing opens.
 ---@diagnostic disable: need-check-nil
+local no_toast = dofile(vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2))) .. "/helpers/no_toast.lua")
 local config = require("rules.config")
 local settings = require("rules.settings")
 local contract = require("rules.contract")
@@ -153,6 +154,7 @@ describe(":RulesVault", function()
     contract.clear_cache()
     require("rules.ui.candidates").reset()
     reset_state()
+    no_toast.block()
     vim.notify = function(msg, level)
       notes[#notes + 1] = { text = tostring(msg), level = level }
     end
@@ -181,6 +183,7 @@ describe(":RulesVault", function()
   end)
 
   after_each(function()
+    no_toast.restore()
     vim.notify, vim.api.nvim_list_uis, vim.o.eventignore = saved_notify, saved_uis, saved_ignore
     for _, name in ipairs(ENV) do
       vim.env[name] = saved_env[name]

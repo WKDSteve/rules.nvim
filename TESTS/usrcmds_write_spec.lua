@@ -3,6 +3,7 @@
 -- The commands are run as a user types them (`vim.cmd("Rules ...")`) against a fixture ruleset in a temporary folder.
 -- A spec that asks a question answers it itself (`rules.ui.confirm.choose` is replaced); nothing opens a dialog.
 ---@diagnostic disable: need-check-nil
+local no_toast = dofile(vim.fs.dirname(vim.fs.normalize(debug.getinfo(1, "S").source:sub(2))) .. "/helpers/no_toast.lua")
 local contract = require("rules.contract")
 local confirm = require("rules.ui.confirm")
 local cmd = require("rules.ui.cmd")
@@ -150,6 +151,7 @@ describe(":Rules new, set, retire, move, list", function()
     require("rules.ui.candidates").reset()
 
     notes = {}
+    no_toast.block()
     vim.notify = function(msg, level)
       notes[#notes + 1] = { text = tostring(msg), level = level }
     end
@@ -162,6 +164,7 @@ describe(":Rules new, set, retire, move, list", function()
   end)
 
   after_each(function()
+    no_toast.restore()
     vim.notify = saved_notify
     _G.print = saved_print
     vim.api.nvim_list_uis = saved_uis
