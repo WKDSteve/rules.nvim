@@ -2,32 +2,31 @@
 --
 -- Without ui.nvim, lib.nvim's popup notifier (`rules.util.notify`) shows a multi-line message in lib.nvim's own toast
 -- (lib.nvim@161d963) instead of handing it to `vim.notify`; the toast wraps the text to its width. These specs check
--- what a message says, not where it is drawn: while `block()` holds, the toast cannot be loaded and the notifier hands
--- every message to `vim.notify`, whole, as it does where no toast can be shown.
+-- what a message says, not where it is drawn: while `block()` holds, lib.nvim's official switch
+-- (`popup.setup({ fallback_toast = false })`) is off and the notifier hands every message to `vim.notify`, whole.
 local M = {}
 
-local NAME = "lib.nvim.ui.kit.toast"
+local blocked = false
 
----@type { preload: function|nil, loaded: any }|nil
-local saved
+---@return table popup lib.nvim.notify.popup
+local function popup()
+  return (require("lib.nvim.notify.popup"))
+end
 
 function M.block()
-  if saved then
+  if blocked then
     return
   end
-  saved = { preload = package.preload[NAME], loaded = package.loaded[NAME] }
-  package.loaded[NAME] = nil
-  package.preload[NAME] = function()
-    error("no toast in this spec: its messages are read from vim.notify")
-  end
+  blocked = true
+  popup().setup({ fallback_toast = false })
 end
 
 function M.restore()
-  if not saved then
+  if not blocked then
     return
   end
-  package.preload[NAME], package.loaded[NAME] = saved.preload, saved.loaded
-  saved = nil
+  blocked = false
+  popup().setup({ fallback_toast = true })
 end
 
 return M
