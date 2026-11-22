@@ -32,9 +32,18 @@
 --- in a fence is no token for the editor but a rule for the generator; `place` therefore refuses an id that stands
 --- hidden like that (the generator would place it twice).
 ---
+--- The other tokens of the generator that hold a rule are not the editor's to move: `{{brief ID}}` (the rule in brief
+--- form), `{{family FAM}}` / `{{family FAM brief}}` (every rule of the family) and `{{refer FAM}}` (the family is read in
+--- another document). A layout that has one of them for a rule CARRIES it (`carried`): `place` refuses to put a
+--- `{{rule ID}}` of that rule into it, naming the token, since the generator would place the rule twice (or, for
+--- `{{refer}}`, in a document that says it is read elsewhere). Like the generator, these tokens count on every line
+--- behind the frontmatter, in a fence or a comment too.
+---
 --- Not its job: finding the layouts of a ruleset (`rules.ops`), writing files, regenerating the documents.
 
 local etag = require("lib.nvim.fs.etag")
+local catalog = require("rules.engine.catalog")
+local parser = require("rules.engine.parser")
 
 local M = {}
 
@@ -124,19 +133,25 @@ end
 ---@field token table<integer, string>  line -> rule id
 ---@field hidden table<integer, string>  line -> rule id, of a token the editor does not see (fence, comment)
 
+---The first line behind the frontmatter (1 when there is none).
+---@param lines string[]
+---@return integer
+local function body_start(lines)
+  if (lines[1] or ""):gsub("%s+$", "") == "---" then
+    for i = 2, #lines do
+      if (lines[i]:gsub("%s+$", "")) == "---" then
+        return i + 1
+      end
+    end
+  end
+  return 1
+end
+
 ---@param lines string[]
 ---@return Rules.LayoutIndex
 local function index(lines)
   local out = { heading = {}, token = {}, hidden = {} }
-  local first = 1
-  if (lines[1] or ""):gsub("%s+$", "") == "---" then
-    for i = 2, #lines do
-      if (lines[i]:gsub("%s+$", "")) == "---" then
-        first = i + 1
-        break
-      end
-    end
-  end
+  local first = body_start(lines)
   local char, len
   local comment = false
   for i = 1, #lines do
@@ -211,6 +226,68 @@ local function find(lines, idx, id)
     end
   end
   return nil
+end
+
+---@class Rules.LayoutCarrier
+---@field line integer  the line of the layout file the token stands on
+---@field token string  the token as written (whitespace behind it left out)
+---@field kind "brief"|"family"|"refer"
+
+---The first token behind the frontmatter that carries the rule `id` (its `{{brief}}`, a `{{family}}` or `{{refer}}` of
+---its family) or, with `id` nil, the family `family`.
+---@param lines string[]
+---@param family string
+---@param id string|nil
+---@return Rules.LayoutCarrier|nil
+local function carrier(lines, family, id)
+  for i = body_start(lines), #lines do
+    local token = catalog.parse_token(lines[i])
+    if
+      token
+      and (
+        (token.kind == "brief" and id ~= nil and token.name == id)
+        or ((token.kind == "family" or token.kind == "refer") and token.name == family)
+      )
+    then
+      return { line = i, token = (lines[i]:gsub("%s+$", "")), kind = token.kind }
+    end
+  end
+  return nil
+end
+
+---The token that carries the rule `id` in the layout other than `{{rule ID}}`: `{{brief ID}}`, `{{family FAM}}`
+---(also with `brief`) or `{{refer FAM}}` of its family; nil when there is none.
+---@param text string
+---@param id string
+---@return Rules.LayoutCarrier|nil
+function M.carried(text, id)
+  return carrier((split(text)), parser.family_of(id), id)
+end
+
+---The `{{family FAM}}` (also with `brief`) or `{{refer FAM}}` token of the family in the layout; nil when there is
+---none. What a new rule of that family would be carried by.
+---@param text string
+---@param family string
+---@return Rules.LayoutCarrier|nil
+function M.carried_family(text, family)
+  return carrier((split(text)), family, nil)
+end
+
+---Why a `{{rule ID}}` of `id` may not go into a layout that carries it.
+---@param held Rules.LayoutCarrier
+---@param id string
+---@return string
+local function carried_error(held, id)
+  if held.kind == "brief" then
+    return ("the layout has %s as %s (line %d): a {{rule %s}} would place it twice"):format(id, held.token, held.line, id)
+  elseif held.kind == "refer" then
+    local why = "the layout refers to the family of %s with %s (line %d): its rules are read in another document, put"
+      .. " %s there"
+    return why:format(id, held.token, held.line, id)
+  end
+  local why = "the layout holds the family of %s with %s (line %d): the rule stands in it already, a {{rule %s}} would"
+    .. " place it twice"
+  return why:format(id, held.token, held.line, id)
 end
 
 ---Whether the layout text has a token for this rule.
@@ -404,6 +481,10 @@ function M.place(text, id, where)
         .. " would be placed twice"
       return nil, why:format(id)
     end
+  end
+  local held = carrier(lines, parser.family_of(id), id)
+  if held then
+    return nil, carried_error(held, id)
   end
   local slot, blank_before, blank_after
   if where.after or where.before then

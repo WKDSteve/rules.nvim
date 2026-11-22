@@ -456,11 +456,19 @@ section). A section with no rule token has only an introduction, which is not a
 rule, so the new token goes behind it (also for "first", and for a section whose
 tokens all stand in subsections), between one blank line before and one after;
 the introduction stays above the rules. Two sections with the same heading are
-told apart by a number (`nth`, the first by default). The editor knows only
-`{{rule ID}}` lines: a rule of a family that a layout holds by `{{family FAM}}`
-is in that layout already, so a `{{rule ID}}` put next to it there would place
-it twice (the generator says so); place it in another layout, or let the family
-token carry it.
+told apart by a number (`nth`, the first by default). The editor moves only
+`{{rule ID}}` lines, but it reads the other tokens that hold a rule: a layout
+with `{{family FAM}}` (also `brief`) or `{{brief ID}}` carries the rule already,
+and one with `{{refer FAM}}` says its rules are read in another document. Into
+such a layout `new`, `move` and `reinstate` put no `{{rule ID}}` of that rule:
+they refuse, naming the token and its line, instead of leaving a document the
+generator would refuse (placed twice). `retire` leaves such a layout as it is
+(the family token no longer finds the rule once its file is gone), and
+`reinstate` names the layouts whose token carries the rule again (`carried`),
+so it does not say the rule comes back in no layout. `--to=` on `:Rules new
+<FAMILY>` and `:Rules move <ID>` does not offer those layouts. Like the
+generator, the editor reads these tokens on every line behind the frontmatter,
+in a fence or a comment too.
 
 **What the editor takes for a heading or a token.** Only a line outside the
 frontmatter, outside a fenced code block and outside an HTML comment. A fence

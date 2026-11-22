@@ -34,8 +34,8 @@ local function register_argtypes()
     validate = function(raw)
       return true, raw, nil
     end,
-    complete = function(arg_lead)
-      return candidates.places(arg_lead)
+    complete = function(arg_lead, _, cmd_line)
+      return candidates.places(arg_lead, cmd_line)
     end,
   })
 

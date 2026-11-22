@@ -17,7 +17,7 @@ local M = {}
 ---How long the places are kept.
 M.TTL_SECONDS = 2
 
----@type { at: integer, key: string, places: table<string, string[]> }|nil
+---@type { at: integer, key: string, places: table<string, string[]>, texts: table<string, string> }|nil
 local places_cache
 
 ---@return Rules.Contract.View|nil
@@ -133,27 +133,29 @@ local function headings(text)
 end
 M.headings = headings
 
----Every layout of every ruleset folder: `output` path -> its headings.
+---Every layout of every ruleset folder: `output` path -> its headings, and `output` path -> its text.
 ---@return table<string, string[]> layouts
+---@return table<string, string> texts
 local function layouts()
   local scan = view()
   if not scan then
-    return {}
+    return {}, {}
   end
   local key = table.concat(scan.paths, "\n")
   local now = (vim.uv.now() or 0)
   if places_cache and places_cache.key == key and now - places_cache.at < M.TTL_SECONDS * 1000 then
-    return places_cache.places
+    return places_cache.places, places_cache.texts
   end
-  local out = {}
+  local out, texts = {}, {}
   local ops = require("rules.ops")
   for _, path in ipairs(scan.paths) do
     for _, layout in ipairs(ops.layouts(path)) do
       out[layout.output] = headings(layout.text)
+      texts[layout.output] = layout.text
     end
   end
-  places_cache = { at = now, key = key, places = out }
-  return out
+  places_cache = { at = now, key = key, places = out, texts = texts }
+  return out, texts
 end
 
 ---The `output` paths of the layouts.
@@ -178,17 +180,64 @@ local function as_word(text)
   return require("rules.cmdline").escape(text)
 end
 
+---The rule (`:Rules move <ID>`) or the family (`:Rules new <FAMILY>`) a command line puts into a layout, as typed so
+---far; nil for another command or when it is not typed yet.
+---@param cmd_line string|nil
+---@return string|nil id
+---@return string|nil family
+local function placed_word(cmd_line)
+  local cmdline = require("rules.cmdline")
+  local words = {}
+  for _, word in ipairs(cmdline.words(cmd_line or "")) do
+    words[#words + 1] = cmdline.unescape(word.text)
+  end
+  local sub, arg = words[2], words[3]
+  -- the third word is the argument only once it is followed by another (the one being completed)
+  if not arg or #words < 4 or arg:sub(1, 1) == "-" or arg:find("=", 1, true) then
+    return nil, nil
+  end
+  if sub == "move" then
+    return arg, nil
+  elseif sub == "new" then
+    return nil, arg
+  end
+  return nil, nil
+end
+
+---Whether the layout carries what the command line puts in (`rules.engine.layout_edit.carried`): a `{{rule ID}}` of
+---it there would be refused, so the layout is no place to offer.
+---@param text string|nil
+---@param id string|nil
+---@param family string|nil
+---@return boolean
+local function carries(text, id, family)
+  if not text or not (id or family) then
+    return false
+  end
+  local layout_edit = require("rules.engine.layout_edit")
+  if id then
+    return layout_edit.carried(text, id) ~= nil
+  end
+  return layout_edit.carried_family(text, family) ~= nil
+end
+
 ---The places that start with `lead`: the layouts' `output` paths until a `#` is typed, then the headings of that
----layout.
+---layout. A layout that carries the rule or the family of the command line (`{{family FAM}}`, `{{refer FAM}}`,
+---`{{brief ID}}`) is left out: the rule is in it already, or read elsewhere.
 ---@param lead string
+---@param cmd_line? string  the command line as typed so far
 ---@return string[]
-function M.places(lead)
-  local all = layouts()
+function M.places(lead, cmd_line)
+  local all, texts = layouts()
+  local id, family = placed_word(cmd_line)
   local out = {}
   local typed = lead:match("^([^#]*)#")
   if typed then
     -- the layout is found by its name, the way it is written on the line (a blank as `\ `) is not that name
     local file = require("rules.cmdline").unescape(typed)
+    if carries(texts[file], id, family) then
+      return out
+    end
     for _, heading in ipairs(all[file] or {}) do
       local candidate = as_word(file) .. "#" .. escape(heading)
       if candidate:sub(1, #lead) == lead then
@@ -199,7 +248,7 @@ function M.places(lead)
   end
   for _, output in ipairs(M.layout_outputs()) do
     local candidate = as_word(output)
-    if candidate:sub(1, #lead) == lead then
+    if candidate:sub(1, #lead) == lead and not carries(texts[output], id, family) then
       out[#out + 1] = candidate
     end
   end

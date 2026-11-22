@@ -585,6 +585,8 @@ function M.reinstate(ctx)
         .. " with --layout= put it in one)."
       if entry.placed and entry.placed.layout then
         where = ("It is put into %s."):format(entry.placed.layout)
+      elseif entry.carried then
+        where = ("Its family token puts it into %s again."):format(table.concat(entry.carried, ", "))
       end
       return ("Reinstate %s?\n\nIts file comes back from _retired/ and the id is in use again. %s"):format(id, where)
     end,
@@ -592,7 +594,7 @@ function M.reinstate(ctx)
     declined = ("%s was not reinstated"):format(id),
     nobody = ("reinstate asks before it brings %s back, and there is nobody to ask: run it with --yes"):format(id),
     after = function(entry)
-      if not entry.placed then
+      if not entry.placed and not entry.carried then
         notify.warn(unplaced_text(id))
       end
     end,

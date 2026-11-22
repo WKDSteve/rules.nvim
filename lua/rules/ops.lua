@@ -197,6 +197,22 @@ local function layouts_of(root)
   return out
 end
 
+---The `output` of every layout of the ruleset whose `{{family}}` or `{{brief}}` token puts the rule into its document
+---with no `{{rule ID}}` of its own (a `{{refer}}` puts no rule anywhere); nil when there is none.
+---@param root string
+---@param id string
+---@return string[]|nil
+local function carried_by(root, id)
+  local out = {}
+  for _, layout in ipairs(layouts_of(root)) do
+    local held = layout_edit.carried(layout.text, id)
+    if held and held.kind ~= "refer" then
+      out[#out + 1] = layout.output
+    end
+  end
+  return out[1] and json.array(out) or nil
+end
+
 ---@class Rules.Tx
 ---@field written table<string, string>   path -> its bytes before (a file that was changed)
 ---@field created string[]                files this operation made
@@ -1168,6 +1184,7 @@ local function do_reinstate(op, ctx)
     if not rule or #rerrs > 0 then
       return refuse("invalid_argument", "the retired file would not read as a rule: " .. tostring((rerrs or {})[1] or "unknown"))
     end
+    entry.carried = carried_by(root, op.id)
     if ctx.dry then
       -- the target and the placement are checked too: a dry run that says "yes" must not fail on them
       if vim.uv.fs_stat(target) then
