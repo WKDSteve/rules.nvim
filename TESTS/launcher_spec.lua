@@ -33,6 +33,13 @@ describe("the rules command", function()
     assert.is_truthy(vim.uv.fs_stat(bin .. "/rules.cmd"))
   end)
 
+  it("is executable in the repository, so a shell runs it by its name from the PATH", function()
+    -- git keeps the mode, not the checkout on Windows (core.fileMode false): asked of git, it holds on every system
+    local tree = vim.system({ "git", "-C", repo, "ls-files", "-s", "--", "bin/rules" }, { text = true }):wait(20000)
+    assert.are.equal(0, tree.code, tree.stderr)
+    assert.are.equal("100755", (tree.stdout or ""):match("^(%d+)"), tree.stdout)
+  end)
+
   it("runs scripts/rules.lua and hands its usage and exit code through", function()
     -- an unknown command is wrong usage (exit 2) before lib.nvim is looked for, so the result does not hang on it
     local r = launch(with_nvim, bin, "no-such-command")
