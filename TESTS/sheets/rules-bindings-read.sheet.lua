@@ -140,6 +140,28 @@ cmd(
   [[_G.said("catalog: 0 written, 1 unchanged, 0 stale, 0 with errors", true)]],
   "finds it up to date and writes nothing"
 )
+-- a compact document: a layout with `folder` and `families: all`, and a generated document no layout makes any more
+add({
+  lua = [[local catalog = require("rules.engine.catalog")
+    local function put(path, text)
+      vim.fn.mkdir(vim.fs.dirname(path), "p")
+      local f = assert(io.open(path, "wb"))
+      f:write(text)
+      f:close()
+    end
+    put(_G.fx.lua .. "/_kontext/kurz.md", table.concat({ "---", "kind: layout", "output: kontext/kurz.md",
+      "folder: kontext", "families: all", "---", "# Kurz", "", "{{family DEP brief}}", "" }, "\n"))
+    put(_G.fx.lua .. "/kontext/alt.md", catalog.header("_kontext/alt.md") .. "\nalt\n")]],
+  note = "a kontext layout ({{family DEP brief}}) and a stale generated document in its folder",
+})
+cmd(
+  "Rules catalog",
+  [[_G.read(_G.fx.lua .. "/kontext/kurz.md") ~= nil
+    and _G.read(_G.fx.lua .. "/kontext/kurz.md"):find("\n- `DEP-01` **No FIXME left**: Text of DEP-01.\n", 1, true)
+    and _G.read(_G.fx.lua .. "/kontext/alt.md") == nil
+    and _G.said("catalog: 1 written, 1 unchanged, 0 stale, 0 with errors, 1 removed", true)]],
+  "writes the compact document and removes the stale one of the folder"
+)
 
 -- the messages of the steps before are in the history; one more so the viewer has a line this sheet knows
 add({ lua = [[require("rules.util.notify").info("sheet marker line")]] })
