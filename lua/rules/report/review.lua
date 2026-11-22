@@ -105,12 +105,12 @@ function M.by()
 end
 
 --- The commit the tree is at, or nil outside a repository (then the verdict is kept without one). Read from the `.git`
---- files (`rules.git_files.head`, no process on the UI loop); git is asked only where the files do not answer the way
+--- files (`lib.nvim.git.files.head`, no process on the UI loop); git is asked only where the files do not answer the way
 --- git would (a reftable repository, an unusual HEAD).
 ---@param root string
 ---@return string|nil
 local function head_commit(root)
-  local head, unsure = require("rules.git_files").head(root)
+  local head, unsure = require("lib.nvim.git.files").head(root)
   if not unsure then
     return head and head.sha or nil
   end

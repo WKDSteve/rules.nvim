@@ -1,11 +1,14 @@
--- TESTS/git_files_spec.lua -- `rules.git_files`: what the files in `.git` answer without a git process (the top of the
--- work tree, the commit of HEAD, the upstream), and where they say `unsure` so the caller asks git as before.
+-- TESTS/git_files_spec.lua -- `lib.nvim.git.files` as rules.nvim relies on it: what the files in `.git` answer without a
+-- git process (the top of the work tree, the commit of HEAD, the upstream), and where they say `unsure` so the caller
+-- asks git as before. rules.nvim had its own reader (`rules.git_files`) until lib.nvim took it over; this spec holds
+-- the answers the callers (`vault.behind`, `vault.git_state`, the acceptance of a review, `:RulesVault create --git`)
+-- depend on, a Windows clone among them.
 --
 -- The repositories are folders this spec writes by hand (HEAD, refs, packed-refs, config): no git runs. Every git
 -- start would fail the spec (`vim.system` and `vim.fn.system` throw while it runs). What real git writes is covered by
 -- `vault_behind_spec` and `vault_spec`, which compare against real repositories.
 ---@diagnostic disable: need-check-nil
-local files = require("rules.git_files")
+local files = require("lib.nvim.git.files")
 
 local SHA_A = string.rep("a", 40)
 local SHA_B = string.rep("b", 40)
@@ -56,7 +59,7 @@ local TRACKING = table.concat({
   "",
 }, "\n")
 
-describe("rules.git_files", function()
+describe("lib.nvim.git.files for rules.nvim", function()
   local saved_system, saved_fn_system
 
   before_each(function()
@@ -149,9 +152,13 @@ describe("rules.git_files", function()
       local top = repo({ refs = { ["refs/heads/main"] = SHA_A } })
       local saved = vim.env.GIT_DIR
       vim.env.GIT_DIR = top .. "/.git"
-      local head, unsure = files.head(top)
-      local _, redirected = files.find(top)
+      -- GIT_DIR goes back whatever happens: a later case run with it set would be unsure for the wrong reason
+      local ok, head, unsure, redirected = pcall(function()
+        local h, u = files.head(top)
+        return h, u, files.env_redirects()
+      end)
       vim.env.GIT_DIR = saved
+      assert(ok, head)
       assert.is_nil(head)
       assert.is_true(unsure)
       assert.is_true(redirected)
@@ -172,13 +179,13 @@ describe("rules.git_files", function()
       })
       local pair, unsure = files.upstream(top .. "/sub")
       assert.is_nil(unsure)
-      assert.are.same({ head = SHA_A, upstream = SHA_B }, pair)
+      assert.are.same({ head = SHA_A, upstream = SHA_B, branch = "main" }, pair)
     end)
 
     it("reads an upstream that is a local branch (remote = .)", function()
       local config = '[branch "main"]\n\tremote = .\n\tmerge = refs/heads/base\n'
       local top = repo({ config = config, refs = { ["refs/heads/main"] = SHA_A, ["refs/heads/base"] = SHA_A } })
-      assert.are.same({ head = SHA_A, upstream = SHA_A }, files.upstream(top))
+      assert.are.same({ head = SHA_A, upstream = SHA_A, branch = "main" }, files.upstream(top))
     end)
 
     it("is nil and sure when the upstream was never fetched, or HEAD is unborn or detached", function()
@@ -207,13 +214,70 @@ describe("rules.git_files", function()
       end
     end)
 
-    it("reads keys without case and the last value of a key, as git does", function()
-      local config = TRACKING .. '[Branch "main"]\n\tMerge = refs/heads/other ; a comment\n'
+    it("reads keys and section names without case, and drops a comment after a value", function()
+      local config = table.concat({
+        '[Remote "origin"]',
+        "\tURL = https://example.invalid/vault.git",
+        "\tFetch = +refs/heads/*:refs/remotes/origin/*",
+        '[Branch "main"]',
+        "\tRemote = origin",
+        "\tMerge = refs/heads/other ; a comment",
+        "",
+      }, "\n")
       local top = repo({
         config = config,
         refs = { ["refs/heads/main"] = SHA_A, ["refs/remotes/origin/other"] = SHA_B },
       })
-      assert.are.same({ head = SHA_A, upstream = SHA_B }, files.upstream(top))
+      local pair, unsure = files.upstream(top)
+      assert.is_nil(unsure)
+      assert.are.same({ SHA_A, SHA_B }, { pair.head, pair.upstream })
+    end)
+
+    it("is unsure of a key given twice: git asks for the upstream then", function()
+      local config = TRACKING .. '[branch "main"]\n\tmerge = refs/heads/other\n'
+      local top = repo({
+        config = config,
+        refs = { ["refs/heads/main"] = SHA_A, ["refs/remotes/origin/other"] = SHA_B },
+      })
+      local pair, unsure = files.upstream(top)
+      assert.is_nil(pair)
+      assert.is_true(unsure)
+    end)
+
+    -- `git clone E:\repos\vault` on Windows writes the URL escaped: `url = E:\\repos\\vault`. The reader rules.nvim had
+    -- gave up on the whole `[remote "origin"]` section then, so every Windows clone asked git for its upstream.
+    it("reads the upstream of a Windows clone, whose URL git writes with backslashes", function()
+      local config = TRACKING:gsub("url = [^\n]+", "url = E:\\\\repos\\\\vault")
+      assert(config:find("E:\\\\repos", 1, true), "the fixture holds the escaped URL")
+      local top = repo({
+        config = config,
+        refs = { ["refs/heads/main"] = SHA_A, ["refs/remotes/origin/main"] = SHA_B },
+      })
+      local pair, unsure = files.upstream(top)
+      assert.is_nil(unsure)
+      assert.are.same({ SHA_A, SHA_B }, { pair.head, pair.upstream })
+    end)
+  end)
+
+  describe("vault.behind of a Windows clone", function()
+    it("is 0 for HEAD at its upstream without starting git", function()
+      local git_lib = require("lib.nvim.git")
+      local original_run = git_lib.run
+      local starts = {}
+      git_lib.run = function(args)
+        starts[#starts + 1] = table.concat(args, " ")
+        error("vault.behind started git: " .. table.concat(args, " "))
+      end
+      local config = TRACKING:gsub("url = [^\n]+", "url = E:\\\\repos\\\\vault")
+      local top = repo({
+        config = config,
+        refs = { ["refs/heads/main"] = SHA_A, ["refs/remotes/origin/main"] = SHA_A },
+      })
+      local ok, behind = pcall(require("rules.vault").behind, top .. "/sub")
+      git_lib.run = original_run
+      assert.are.same({}, starts, "no git process")
+      assert(ok, behind)
+      assert.are.equal(0, behind)
     end)
   end)
 end)

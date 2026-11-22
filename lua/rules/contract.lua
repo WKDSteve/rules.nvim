@@ -142,7 +142,7 @@ function M.settle_engine(timeout_ms)
   if vim.fn.executable("git") ~= 1 then
     return
   end
-  local repo = require("rules.git_files").find(plugin_root)
+  local repo = require("lib.nvim.git.files").find(plugin_root)
   if not (repo and require("lib.nvim.fs.same_path")(repo.top, plugin_root, { realpath = true })) then
     return
   end

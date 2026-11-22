@@ -70,7 +70,7 @@ describe("rules.contract: engine.git in the editor", function()
   end)
 
   it("the printed document waits for the running lookup and names the commit", function()
-    local repo = require("rules.git_files").find(plugin_root)
+    local repo = require("lib.nvim.git.files").find(plugin_root)
     if vim.fn.executable("git") ~= 1 or not (repo and require("lib.nvim.fs.same_path")(repo.top, plugin_root)) then
       print("n/a  the plugin folder is no git checkout of its own here")
       return

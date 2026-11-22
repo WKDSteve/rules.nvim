@@ -133,9 +133,10 @@ local function git_frame(root)
   if vim.fn.executable("git") ~= 1 then
     return nil, true
   end
-  -- the top of the work tree from the `.git` files (rules.git_files), not from `git rev-parse --show-toplevel`: one
+  -- the top of the work tree from the `.git` files (lib.nvim.git.files), not from `git rev-parse --show-toplevel`: one
   -- git start less on the UI loop, the same answer
-  local repo, redirected = require("rules.git_files").find(root)
+  local files = require("lib.nvim.git.files")
+  local repo, redirected = files.find(root), files.env_redirects()
   local top = repo and repo.top
   if redirected then
     -- GIT_DIR and the like point git elsewhere: only git knows its answer (rare, and asked as before)
@@ -242,17 +243,18 @@ local behind_cache_size = 0
 ---`nil` is "nothing to say" and covers git not installed, not a repository, no commit yet, no upstream, a timeout
 ---and anything git answers that is not a number: a warning that cannot be given is silence, never an error.
 ---
----The `.git` files answer first (rules.git_files): HEAD and its upstream at the same commit is 0 without git, and a
+---The `.git` files answer first (lib.nvim.git.files): HEAD and its upstream at the same commit is 0 without git, and a
 ---count git gave is kept for that pair of commits (the count of two commits never changes, so the cache needs no
 ---invalidation; a commit, a pull or a fetch is a new pair). Only a new pair, or files git reads in a way the reader does
----not follow, start `git rev-list`.
+---not follow, start `git rev-list`. (`git.ahead_behind_fast` would say only whether, not how many: the warning names
+---the count.)
 ---@param root string
 ---@return integer|nil behind  commits to pull (0: up to date)
 function M.behind(root)
   if vim.fn.executable("git") ~= 1 then
     return nil
   end
-  local pair, unsure = require("rules.git_files").upstream(root)
+  local pair, unsure = require("lib.nvim.git.files").upstream(root)
   if not pair and not unsure then
     -- no repository, an unborn or detached HEAD, no upstream fetched: what git would fail on too
     return nil

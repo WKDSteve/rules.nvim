@@ -239,7 +239,7 @@ describe("rules.vault.behind @spawn", function()
 
   it("asks git for the local refs only: read only, with a timeout, no fetch, no pull", function()
     local git_lib = require("lib.nvim.git")
-    local files = require("rules.git_files")
+    local files = require("lib.nvim.git.files")
     local original, original_upstream = git_lib.run, files.upstream
     local seen
     git_lib.run = function(args, opts)
@@ -263,7 +263,7 @@ describe("rules.vault.behind @spawn", function()
 
   it("is silent when git times out, fails, or answers with something else", function()
     local git_lib = require("lib.nvim.git")
-    local files = require("rules.git_files")
+    local files = require("lib.nvim.git.files")
     local original, original_upstream = git_lib.run, files.upstream
     files.upstream = function()
       return nil, true

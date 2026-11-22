@@ -357,7 +357,7 @@ end
 ---another repository, which `git init` must not nest a second one in). A folder that is not there yet is judged by the
 ---nearest folder above it that is.
 ---
----Read from the `.git` files (`rules.git_files.find`), no git process: the plan is made twice (before the question and
+---Read from the `.git` files (`lib.nvim.git.files.find`), no git process: the plan is made twice (before the question and
 ---again after it), and only the top of the work tree is asked, never its state.
 ---@param root string
 ---@return "init"|"already"|"inside" what
@@ -374,7 +374,8 @@ function M.git_plan(root)
   if vim.fn.executable("git") ~= 1 then
     return "init", nil
   end
-  local repo, redirected = require("rules.git_files").find(probe)
+  local files = require("lib.nvim.git.files")
+  local repo, redirected = files.find(probe), files.env_redirects()
   local top = repo and repo.top
   if redirected then
     -- GIT_DIR and the like point git elsewhere: ask git, as before
