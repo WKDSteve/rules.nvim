@@ -37,7 +37,8 @@ return {
     -- directory to test the diff-scoped gate; git is the real tool the plugin integrates.
     -- contract_spec.lua runs scripts/rules.lua in a headless nvim to prove the exit codes of the
     -- command line (0 an answer, 1 an error document, 2 wrong usage).
-    spawn = { "git", "nvim" },
+    -- launcher_spec.lua runs bin/rules (sh) and bin/rules.cmd (cmd) as a person does.
+    spawn = { "git", "nvim", "sh", "cmd" },
   },
   -- gated: a failed conformance check makes `scripts/test.sh conformance` exit 1 (docs/CONFORMANCE.md of testing.nvim)
   conformance = {

@@ -44,6 +44,7 @@ provide — the same way you'd point ESLint at your own `.eslintrc`.
 - [Quickstart](#quickstart)
 - [Ruleset format](#ruleset-format)
 - [MCP server](#mcp-server)
+- [Command line](#command-line)
 - [Contributing](#contributing)
 - [Feedback](#feedback)
 - [License](#license)
@@ -240,6 +241,20 @@ claude mcp add rules -- nvim --headless -u NONE -l /path/to/rules.nvim/scripts/m
 `--ruleset`, `--vault`, `--project` and `--trust` mean what they mean for `scripts/rules.lua`; without them the server
 reads `$RULES_RULESETS`, `$RULES_VAULT`, `$RULES_PROJECT` and `$RULES_TRUST`. Needs lib.nvim with
 `lib.nvim.mcp.server`.
+
+## Command line
+
+`scripts/rules.lua` answers the same contract in a terminal (`call`, `list`, `locate`, `intent`; see the head of the
+script). Put the `bin/` folder of the checkout on your `PATH` and call it as `rules`: `bin/rules` for POSIX shells and
+Git Bash, `bin/rules.cmd` for PowerShell and cmd.
+
+```sh
+rules list --format=json --family=DEP
+rules locate DEP-06
+```
+
+The exit code is the script's (0 an answer, 1 an error document, 2 wrong usage); without `nvim` on the `PATH`, or a
+copy of the launcher away from its checkout, it says so and ends with 3.
 
 ## Contributing
 
