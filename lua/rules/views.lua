@@ -17,6 +17,7 @@
 --- Not its job: the documents (`rules.contract`), the request (`rules.ops`).
 
 local fm = require("lib.nvim.markdown.frontmatter")
+local view_file = require("lib.nvim.view_file")
 local etag = require("lib.nvim.fs.etag")
 local read = require("lib.nvim.fs.read")
 local create_exclusive = require("lib.nvim.fs.create_exclusive")
@@ -48,10 +49,6 @@ M.MAX_ENTRY = 300
 ---Longest name of a view file, without `.md`.
 M.MAX_SLUG = 80
 
-local DISPLAY_SET = {}
-for _, v in ipairs(M.DISPLAYS) do
-  DISPLAY_SET[v] = true
-end
 local FIELD_SET = {}
 for _, v in ipairs(M.GROUP_FIELDS) do
   FIELD_SET[v] = true
@@ -124,146 +121,25 @@ local function leaves(root)
   return nil
 end
 
----A list of short single-line words (the entries of the selection, the folded groups).
----@param value any
----@param what string
----@return string[]|nil list
----@return string|nil err
-local function words(value, what)
-  if value == nil or value == vim.NIL then
-    return {}, nil
-  end
-  if type(value) ~= "table" then
-    return nil, what .. " must be a list of words"
-  end
-  if #value > M.MAX_LIST then
-    return nil, ("%s has more than %d entries"):format(what, M.MAX_LIST)
-  end
-  local out, seen = {}, {}
-  for _, v in ipairs(value) do
-    if type(v) ~= "string" or has_control(v) then
-      return nil, what .. " holds an entry that is not a word"
-    end
-    if vim.fn.strchars(v) > M.MAX_ENTRY then
-      return nil, ("%s holds an entry longer than %d characters"):format(what, M.MAX_ENTRY)
-    end
-    if not seen[v] then
-      seen[v] = true
-      out[#out + 1] = v
-    end
-  end
-  return out, nil
-end
+local shape = view_file.new({
+  displays = M.DISPLAYS,
+  is_field = M.is_field,
+  fields_hint = table.concat(M.GROUP_FIELDS, ", ") .. ", or layout:<ruleset>:<output>",
+  select = M.SELECT,
+  allow_empty_word = true,
+  max_list = M.MAX_LIST,
+  max_entry = M.MAX_ENTRY,
+})
 
 ---Check a view as a caller gives it and put it in the shape the file and the document have.
 ---@param def table  `{ title, display, group_by, group_by2?, collapsed?, select? }`
 ---@return table|nil view
 ---@return string|nil err
 function M.normalize(def)
-  if type(def) ~= "table" then
-    return nil, "a view must be an object"
-  end
-  if type(def.title) ~= "string" or vim.trim(def.title) == "" then
-    return nil, "a view needs a title"
-  end
-  if has_control(def.title) then
-    return nil, "title contains a control character"
-  end
-  if vim.fn.strchars(def.title) > M.MAX_ENTRY then
-    return nil, ("title is longer than %d characters"):format(M.MAX_ENTRY)
-  end
-  if not DISPLAY_SET[def.display] then
-    return nil, ("display '%s' is unknown (expected %s)"):format(tostring(def.display), table.concat(M.DISPLAYS, ", "))
-  end
-  if not M.is_field(def.group_by) then
-    return nil,
-      ("group_by '%s' is not a field to group by (expected %s, or layout:<ruleset>:<output>)"):format(
-        tostring(def.group_by),
-        table.concat(M.GROUP_FIELDS, ", ")
-      )
-  end
-  local second = def.group_by2
-  if second == vim.NIL then
-    second = nil
-  end
-  if second ~= nil then
-    if def.display ~= "matrix" then
-      return nil, "group_by2 is for a matrix only"
-    end
-    if not M.is_field(second) then
-      return nil, ("group_by2 '%s' is not a field to group by"):format(tostring(second))
-    end
-    if second == def.group_by then
-      return nil, "group_by2 must be another field than group_by"
-    end
-  elseif def.display == "matrix" then
-    return nil, "a matrix needs group_by2"
-  end
-  local view = { title = vim.trim(def.title), display = def.display, group_by = def.group_by, group_by2 = second, select = {} }
-  local collapsed, cerr = words(def.collapsed, "collapsed")
-  if not collapsed then
-    return nil, cerr
-  end
-  view.collapsed = collapsed
-  local select = def.select
-  if select ~= nil and select ~= vim.NIL and type(select) ~= "table" then
-    return nil, "select must be an object"
-  end
-  select = (select ~= vim.NIL and select) or {}
-  for key in pairs(select) do
-    local known = key == "query"
-    for _, s in ipairs(M.SELECT) do
-      known = known or s.name == key
-    end
-    if not known then
-      return nil, ("select: unknown entry '%s'"):format(tostring(key))
-    end
-  end
-  for _, s in ipairs(M.SELECT) do
-    local list, err = words(select[s.name], "select." .. s.name)
-    if not list then
-      return nil, err
-    end
-    view.select[s.name] = list
-  end
-  local query = select.query
-  if query ~= nil and query ~= vim.NIL then
-    if type(query) ~= "string" or has_control(query) or vim.fn.strchars(query) > M.MAX_ENTRY then
-      return nil, "select.query must be one line of text"
-    end
-    view.select.query = vim.trim(query) ~= "" and vim.trim(query) or nil
-  end
-  return view, nil
+  return shape.normalize(def)
 end
 
----The frontmatter of a view, as `{ key, value }` pairs in the order the file has them; a key a view does not have is
----`REMOVE` when `patch` (a change of a file that exists), left out when new.
----@param view table
----@param dates { created?: string, updated: string }
----@param patch boolean
----@return table[]
-local function pairs_of(view, dates, patch)
-  local out = { { "title", view.title }, { "display", view.display }, { "group_by", view.group_by } }
-  local function optional(key, value)
-    if value ~= nil then
-      out[#out + 1] = { key, value }
-    elseif patch then
-      out[#out + 1] = { key, fm.REMOVE }
-    end
-  end
-  optional("group_by2", view.group_by2)
-  optional("collapsed", #view.collapsed > 0 and view.collapsed or nil)
-  for _, s in ipairs(M.SELECT) do
-    local list = view.select[s.name]
-    optional(s.key, list and #list > 0 and list or nil)
-  end
-  optional("sel_query", view.select.query)
-  if dates.created then
-    out[#out + 1] = { "created", dates.created }
-  end
-  out[#out + 1] = { "updated", dates.updated }
-  return out
-end
+local pairs_of = shape.pairs_of
 
 ---A view file's text read as a view.
 ---@param text string
@@ -271,40 +147,12 @@ end
 ---@return table|nil view
 ---@return string|nil problem
 function M.parse_text(text, slug)
-  local parsed, perr = fm.parse(text)
-  if not parsed then
-    return nil, "frontmatter unreadable: " .. tostring(perr)
-  end
-  local function get(key)
-    return fm.get(parsed, key)
-  end
-  local function list(key)
-    local v = get(key)
-    if v == nil then
-      return {}
-    end
-    return type(v) == "table" and v or { v }
-  end
-  local select = {}
-  for _, s in ipairs(M.SELECT) do
-    select[s.name] = list(s.key)
-  end
-  select.query = get("sel_query")
-  local view, err = M.normalize({
-    title = get("title") or slug,
-    display = get("display"),
-    group_by = get("group_by"),
-    group_by2 = get("group_by2"),
-    collapsed = list("collapsed"),
-    select = select,
-  })
+  local view, err = shape.parse_text(text, slug)
   if not view then
     return nil, err
   end
   view.id = slug
   view.etag = etag.of(text)
-  view.created = get("created")
-  view.updated = get("updated")
   return view, nil
 end
 
