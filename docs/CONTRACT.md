@@ -74,16 +74,16 @@ left out. At most 256 KiB.
 
 | Method | Parameters | Answer (`kind`) |
 | --- | --- | --- |
-| `hello` | none | `rules.hello`: schemas, capabilities, limits, enums. Reads no rule. |
-| `snapshot` | none | `rules.snapshot`: counts, families (with severity counters), every rule (summary), sources, gates, `load_errors`. |
-| `list` | `family`, `severity`, `limit` (1..500, default 100), `offset` | `rules.list`: a page of rule summaries in id order. |
-| `rule` | `id` (required) | `rules.rule`: one rule with `text`, `check` and the `etag` of its file. |
-| `next_id` | `family` (letters) | `rules.next_id`: the next free id of a family, or of every family. |
-| `sources` | none | `rules.sources`: the files, each with its `etag`. |
-| `waivers` | `project` | `rules.waivers`: the waivers of a project, each with `expired` and `known`, see [Waivers](#waivers). |
-| `rulesets` | none | `rules.rulesets`: the loaded rulesets (`name`, `folder`, `in_vault`; an empty one too) and the `archived` folder names of the vault, see [Rulesets](#rulesets). No path. |
-| `groupings` | none | `rules.groupings`: the fields a view of the rules groups by, their values in order and how a drag between two groups is written (`mode`), one field per layout with the section of each of its rules, see [Groupings](#groupings). |
-| `views` | none | `rules.views`: the saved views of the vault (`<vault>/views/<slug>.md`) and the files that are no view (`problems`), see [Views](#views). |
+| `hello` | none | `"rules.hello"`: schemas, capabilities, limits, enums. Reads no rule. |
+| `snapshot` | none | `"rules.snapshot"`: counts, families (with severity counters), every rule (summary), sources, gates, `load_errors`. |
+| `list` | `family`, `severity`, `limit` (1..500, default 100), `offset` | `"rules.list"`: a page of rule summaries in id order. |
+| `rule` | `id` (required) | `"rules.rule"`: one rule with `text`, `check` and the `etag` of its file. |
+| `next_id` | `family` (letters) | `"rules.next_id"`: the next free id of a family, or of every family. |
+| `sources` | none | `"rules.sources"`: the files, each with its `etag`. |
+| `waivers` | `project` | `"rules.waivers"`: the waivers of a project, each with `expired` and `known`, see [Waivers](#waivers). |
+| `rulesets` | none | `"rules.rulesets"`: the loaded rulesets (`name`, `folder`, `in_vault`; an empty one too) and the `archived` folder names of the vault, see [Rulesets](#rulesets). No path. |
+| `groupings` | none | `"rules.groupings"`: the fields a view of the rules groups by, their values in order and how a drag between two groups is written (`mode`), one field per layout with the section of each of its rules, see [Groupings](#groupings). |
+| `views` | none | `"rules.views"`: the saved views of the vault (`<vault>/views/<slug>.md`) and the files that are no view (`problems`), see [Views](#views). |
 | `ops` | `client_op_id`, `dry_run`, `ops` (flat: the fields are the request's own) | `rules.result`: one entry per operation, see [rules-ops/1](#rules-ops1-write). |
 
 ### `etag` and `etag_scope`
@@ -96,7 +96,7 @@ change to the document changes the etag of every rule in it.
 
 ### Groupings
 
-`rules.groupings` is what a client needs to show the rules in groups (columns, a list of sections, a matrix of two
+`"rules.groupings"` is what a client needs to show the rules in groups (columns, a list of sections, a matrix of two
 fields) and to turn a drag from one group to another into an operation, without knowing a field itself (the same form
 as `tasks.groupings` of tasks.nvim). Each entry of `fields` has `field`, `values` (in their order; a value no rule has
 yet is named too, a group with no rule is a place to drop), `truncated` (at most 200 values), `writable` and, when it
@@ -107,7 +107,7 @@ is written, `mode`:
 | `family` | the families that have rules, sorted | none | read only: the family is part of the id |
 | `severity` | `critical`, `recommended`, `nice-to-have` | `set` | `set` with `patch.severity` |
 | `status` | `active` (a rule of `snapshot.rules`), `retired` (one of `snapshot.retired`) | `retire` | onto `retired`: `retire`; back onto `active`: `reinstate` |
-| `waiver` | `active`, `expired` | none | read only: the client reads it from `rules.waivers` |
+| `waiver` | `active`, `expired` | none | read only: the client reads it from `"rules.waivers"` |
 | `layout` | the headings of one layout, each text once, in their order | `move` | `move` with the place `{ section, layout }` |
 
 There is one `layout` field for each layout of each ruleset, with `ruleset` (the name it goes by) and `layout` (the
@@ -120,7 +120,7 @@ no member. The `rev` covers the rule files and the layouts, so a `move` (which c
 A saved view is a way to look at the rules, not a rule: a selection, the field it groups by (for a matrix a second
 one), how it is drawn and the groups that are folded. It is a small Markdown file of the vault, `<vault>/views/<slug>.md`
 (not of a ruleset: a view may show the rules of several), so it is the same on every machine; the engine writes it only
-through `view_save` and `view_delete`, on the version read. `rules.views` lists them sorted by `id` (the name of the
+through `view_save` and `view_delete`, on the version read. `"rules.views"` lists them sorted by `id` (the name of the
 file); a file there that cannot be read as a view is no view but a line of `problems` (`id`, `file` in the vault,
 `message`, without a path of the machine), and never hides the others. A view that names a layout which is gone is the
 client's to show. A folder `views` that is a symbolic link is one problem and is neither read nor written.
@@ -192,7 +192,7 @@ is true only if all entries are. `dry_run` checks everything and writes nothing.
 | `waive` | `id`, `reason`, `expires`?, `paths`?, `project`?, `if_match`? | Adds the waiver of a project's `.rules-waivers.json` (not a ruleset file). `inverse`: `remove`. See [Waivers](#waivers). |
 | `renew` | `id`, `expires` or `no_expiry`, `reason`?, `project`?, `if_match`? | Gives a waiver a new last day. `inverse`: `renew` back. |
 | `remove` | `id`, `project`?, `if_match`? | Drops a waiver. `inverse`: `waive` with the old values. |
-| `view_save` | `id`?, `view`, `if_match`? | Makes or replaces a saved view (`rules.views`). `view` is `{ title, display, group_by, group_by2?, collapsed?, select? }`: the title one line of at most 300 characters, `display` `columns`, `list` or `matrix`, `group_by` a field of `rules.groupings` (`family`, `severity`, `status`, `waiver`, or `layout:<ruleset>:<output>`), `group_by2` only for a `matrix` and another field, `select` with `families`, `severities`, `statuses`, `rulesets` (lists, empty narrows nothing) and `query`, at most 100 entries of at most 300 characters in a list. Without `id` a new file `<vault>/views/<slug>.md` is made, the name taken from the title (a taken one gets `-2`, `-3`); with `id` that view is replaced, only on the version read (a view that exists and no `if_match`, or a stale one, is a `conflict`); an `id` that is free is made. The same view again is `unchanged`. `inverse`: a `view_delete` of a view made, a `view_save` of the old view for a change. |
+| `view_save` | `id`?, `view`, `if_match`? | Makes or replaces a saved view (`"rules.views"`). `view` is `{ title, display, group_by, group_by2?, collapsed?, select? }`: the title one line of at most 300 characters, `display` `columns`, `list` or `matrix`, `group_by` a field of `"rules.groupings"` (`family`, `severity`, `status`, `waiver`, or `layout:<ruleset>:<output>`), `group_by2` only for a `matrix` and another field, `select` with `families`, `severities`, `statuses`, `rulesets` (lists, empty narrows nothing) and `query`, at most 100 entries of at most 300 characters in a list. Without `id` a new file `<vault>/views/<slug>.md` is made, the name taken from the title (a taken one gets `-2`, `-3`); with `id` that view is replaced, only on the version read (a view that exists and no `if_match`, or a stale one, is a `conflict`); an `id` that is free is made. The same view again is `unchanged`. `inverse`: a `view_delete` of a view made, a `view_save` of the old view for a change. |
 | `view_delete` | `id`, `if_match` | Deletes a saved view, on the version read: `if_match` is required (a view is shared by every machine of the vault; missing: `invalid_argument`, stale: `conflict`). `inverse`: a `view_save` that makes it again. |
 | `create_ruleset` | `name` | Makes a ruleset in the vault: `rulesets/<name>/_rules/.gitkeep` and `_layouts/.gitkeep`, and adds `rulesets/<name>` to the `rulesets` list of the vault's `.rules.json` when that file has a list that does not offer it. `name`: letters, digits, `.`, `_`, `-`, starting with a letter or digit, no Windows device name. A folder of that name in any letter case is `conflict`. `inverse`: `archive_ruleset`. See [Rulesets](#rulesets). |
 | `archive_ruleset` | `name` | MOVES `rulesets/<name>` to `archive/rulesets/<name>` and takes it out of the `.rules.json` list. Never deletes. The last ruleset of the vault is not archived (`invalid_argument`); a name already in the archive is `conflict`. `inverse`: `restore_ruleset`. |
@@ -346,7 +346,7 @@ No answer names the project: messages say "the project" and "the waivers file", 
   `.rules-waivers.json.lock` beside the file (`lib.nvim` `with_lock`); a held lock is `locked` (`retryable`). A lock
   or write failure says so without the path.
 - `if_match` is the `etag` of the **file**; a project without one has the etag of an empty file
-  (`sha256:e3b0c44298fc1c14`), so "create it only if nobody did" works. The `rules.waivers` document carries the current
+  (`sha256:e3b0c44298fc1c14`), so "create it only if nobody did" works. The `"rules.waivers"` document carries the current
   `etag`.
 - A file that exists and cannot be used (not JSON, an unknown key, a bad date, an empty file, a folder) is
   `invalid_argument` and is **not** touched; a link where the file belongs is `forbidden` (the write would replace the
@@ -379,7 +379,7 @@ nothing else ([BINDINGS.md](BINDINGS.md#waiving-findings)); they show the warnin
 
 ### `waivers` (read)
 
-`waivers` { `project`? } answers `rules.waivers`: `today` (the day the expiry is judged against), `etag` and `exists` (of the
+`waivers` { `project`? } answers `"rules.waivers"`: `today` (the day the expiry is judged against), `etag` and `exists` (of the
 file), `counts` (`total`, `expired`, `unknown`) and `items` in id order: `id`, `reason`, `expires`?, `paths`?, `expired`
 (the last day is before `today`) and `known` (a loaded rule has the id; false: the waiver protects nothing). A file that
 cannot be used is an error document, never an empty list. A report of a check (`check_family_json`, `run_gate_json`)
@@ -460,12 +460,12 @@ whose message names the kind of file (`project .rules.json`, `vault .rules.json`
 
 `scripts/rules.lua intent <file|-> [--family=F] [--severity=S] [--yes]` takes one intent `wkd-intent/1` (from a file
 or stdin, at most 64 KiB) and maps it to the engine's own doors (`rules.intent`). An intent is untrusted input: the
-schema, the action (only `rules.show` and `rules.new`), the data class of the finding (`public` or `internal`; a
+schema, the action (only `"rules.show"` and `"rules.new"`), the data class of the finding (`public` or `internal`; a
 missing, `private` or `unclassified` class is refused), the field lengths and the absence of any path of another
 machine are checked first. Exit 1 and an `error: <code>: <message>` line for a refused intent.
 
-- `rules.show` answers the document of `rule` for `target.id` (or `finding.rule`).
-- `rules.new` is a **dry run** (`would_create`) unless `--yes` is given; it creates the rule through `ops new` with the
+- `"rules.show"` answers the document of `rule` for `target.id` (or `finding.rule`).
+- `"rules.new"` is a **dry run** (`would_create`) unless `--yes` is given; it creates the rule through `ops new` with the
   title of the finding and the evidence as a reference (`file:line`, `repo@sha`), never the excerpt. The family is a
   proposal: `--family`, else the family of `finding.rule`; none is guessed, and the ops door refuses a misspelled one.
 
@@ -476,7 +476,7 @@ never an excerpt; the answer is checked (`rules.engine.agent.draft`: one JSON ob
 character, fence, heading or path of another machine) and fills the form of `:Rules new`, which asks again before
 anything is created. A refused or failed draft says why and opens the form with the plain text of the finding. The
 headless `scripts/rules.lua intent` has no model: such an intent runs as `form` and the result says so (`mode`).
-`rules.show` through `:Rules agent --intent=` opens the rule file.
+`"rules.show"` through `:Rules agent --intent=` opens the rule file.
 
 ## Tests
 
