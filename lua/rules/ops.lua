@@ -718,7 +718,11 @@ local function do_new(op, ctx)
     return refuse("invalid_argument", rwhy or "no ruleset")
   end
   if not is_folder(root) then
-    return refuse("invalid_argument", "the ruleset is a single file; new needs a ruleset folder")
+    -- a relative `--ruleset` resolves against the working directory: a path that is not there is no single file
+    if not (vim.uv or vim.loop).fs_stat(root) then
+      return refuse("not_found", ("the ruleset %s does not exist; new needs a ruleset folder"):format(root))
+    end
+    return refuse("invalid_argument", ("the ruleset %s is a single file; new needs a ruleset folder"):format(root))
   end
 
   local warnings = behind_warnings(ctx, root)

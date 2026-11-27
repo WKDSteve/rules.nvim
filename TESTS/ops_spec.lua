@@ -539,6 +539,23 @@ describe("rules-ops/1 new", function()
     assert.are.equal(LAYOUT_DEP, read_raw(root .. "/_layouts/regeln/DEP.md"))
   end)
 
+  it("tells a ruleset that does not exist from a single file and names the path", function()
+    local root = tmp_dir()
+    local missing = root .. "/nowhere"
+    local file = root .. "/single.md"
+    write_raw(file, rule_file("DEP-01", "recommended", "one", { "Text." }))
+    local op = { op = "new", family = "DEP", title = "t", severity = "critical" }
+    local gone = one({ rulesets = { missing }, today = "2026-10-14" }, op, { dry_run = true })
+    assert.are.equal("not_found", gone.error.code)
+    assert.is_truthy(gone.error.message:find("does not exist", 1, true))
+    assert.is_truthy(gone.error.message:find(vim.fs.basename(missing), 1, true))
+    assert.is_nil(gone.error.message:find("single file", 1, true))
+    local single = one({ rulesets = { file }, today = "2026-10-14" }, op, { dry_run = true })
+    assert.are.equal("invalid_argument", single.error.code)
+    assert.is_truthy(single.error.message:find("single file", 1, true))
+    assert.is_truthy(single.error.message:find("single.md", 1, true))
+  end)
+
   it("refuses bad input before writing anything", function()
     local root, opts = fixture()
     local cases = {
