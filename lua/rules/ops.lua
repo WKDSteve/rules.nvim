@@ -16,12 +16,15 @@
 ---    editing lines (`rules.engine.rule_edit`); `if_match` is the etag the client saw, a changed file is a
 ---    `conflict` with `expected` and `actual`. `null` in `check`/`agent` removes it. `inverse`: `set` back.
 ---  - `retire` { id, replaced_by?, reason?, if_match? } moves the file to `<ruleset>/_retired/<FAMILY>/<ID>.md`
----    (the loader does not read that folder, the id stays taken) and takes its place in the layouts out.
+---    (the loader does not read that folder, the id stays taken) and takes its place in the layouts out: its
+---    `{{rule ID}}` line, or its `{{brief ID}}` line (then the place has `form = "brief"`).
 ---    `inverse`: `reinstate` with `places` (every layout that held the rule).
 ---  - `reinstate` { id, place? | places? } brings a retired rule back, to where it came from. `places` is
----    `{ [layout output] = place }`. `inverse`: `retire`.
+---    `{ [layout output] = place }`; a place of `reinstate` may carry `form = "brief"`: the rule goes back as the
+---    `{{brief ID}}` that `retire` took out, not as `{{rule ID}}`. `inverse`: `retire`.
 ---  - `move` { id, after? | before? | (layout, section, first? | (line, around?), nth?) } moves the `{{rule ID}}` line of
----    a rule, within a layout or to another one; the rule's file is not touched. `inverse`: `move` back.
+---    a rule, within a layout or to another one; the rule's file is not touched. `inverse`: `move` back. A
+---    `{{brief ID}}` line is not moved: a layout that has one refuses a `{{rule ID}}` of that rule, naming the line.
 ---
 ---  - `waive` { id, reason, expires?, paths?, project?, if_match? }, `renew` { id, expires | no_expiry, reason?, project?,
 ---    if_match? } and `remove` { id, project?, if_match? } write the `.rules-waivers.json` of a PROJECT, not a ruleset
@@ -419,7 +422,13 @@ end
 ---@return string|nil why
 local function placement(op)
   local n = (op.after and 1 or 0) + (op.before and 1 or 0) + (op.section and 1 or 0) + (op.top and 1 or 0)
+  if op.form ~= nil and op.form ~= "rule" and op.form ~= "brief" then
+    return nil, "form is rule or brief"
+  end
   if n == 0 then
+    if op.form ~= nil then
+      return nil, "form needs a place"
+    end
     if op.layout ~= nil or op.first ~= nil or op.nth ~= nil or op.line ~= nil or op.around ~= nil or op.gap ~= nil then
       return nil, "layout, first, nth, line, around and gap need a place"
     end
@@ -460,6 +469,7 @@ local function placement(op)
     layout = op.layout,
     top = op.top,
     gap = op.gap,
+    form = op.form,
   },
     nil
 end
@@ -485,8 +495,9 @@ local function placements(op)
     or op.line ~= nil
     or op.around ~= nil
     or op.gap ~= nil
+    or op.form ~= nil
   then
-    return nil, "places goes alone, without after, before, section, layout, first, nth, line, around, gap or top"
+    return nil, "places goes alone, without after, before, section, layout, first, nth, line, around, gap, top or form"
   end
   local outputs = vim.tbl_keys(op.places)
   table.sort(outputs)
@@ -497,9 +508,12 @@ local function placements(op)
       return nil, "every entry of places must be an object"
     end
     for key, value in pairs(one) do
-      if not (PLACE_FIELDS[key] and key ~= "layout" and place_field_ok(key, value)) then
-        return nil,
-          "an entry of places has after, before, section, first, nth, line, around, gap or top, not " .. tostring(key):sub(1, 40)
+      -- `form` (the token `retire` took out: `{{rule}}` or `{{brief}}`) is a field of a place of `reinstate` only
+      local ok = key == "form" and type(value) == "string"
+        or (PLACE_FIELDS[key] and key ~= "layout" and place_field_ok(key, value))
+      if not ok then
+        local why = "an entry of places has after, before, section, first, nth, line, around, gap, top or form, not "
+        return nil, why .. tostring(key):sub(1, 40)
       end
     end
     local where, why = placement(vim.tbl_extend("force", one, { layout = output }))
@@ -589,9 +603,10 @@ end
 ---(the blank lines around it) where `place` would not write them on its own; `nil` when the layout does not hold it.
 ---@param layout Rules.Layout
 ---@param id string
+---@param form? "rule"|"brief"  the token: `{{rule ID}}` (default) or `{{brief ID}}`, then with `form = "brief"`
 ---@return table|nil
-local function old_place(layout, id)
-  local where = layout_edit.where(layout.text, id)
+local function old_place(layout, id, form)
+  local where = layout_edit.where(layout.text, id, form)
   if not where then
     return nil
   end
@@ -1012,13 +1027,18 @@ local function do_retire(op, ctx)
     if not close then
       return refuse("invalid_argument", "the file has no closed frontmatter")
     end
-    -- which layouts hold the rule, and where: for the inverse, for the hint in the retired file and for taking it out
+    -- which layouts hold the rule, and where: for the inverse, for the hint in the retired file and for taking it out.
+    -- A `{{brief ID}}` names the rule as well (the generator would fail on it), so it goes too, with its form kept;
+    -- a `{{family}}` needs nothing (the family no longer finds the file)
     local held = {}
     local places = {}
     for _, layout in ipairs(layouts_of(root)) do
-      if layout_edit.has(layout.text, op.id) then
-        held[#held + 1] = layout
-        local one = old_place(layout, op.id) or {}
+      local form = layout_edit.has(layout.text, op.id) and "rule"
+        or layout_edit.has(layout.text, op.id, "brief") and "brief"
+        or nil
+      if form then
+        held[#held + 1] = { layout = layout, form = form }
+        local one = old_place(layout, op.id, form) or {}
         one.layout = nil
         places[layout.output] = json.object(one)
       end
@@ -1042,12 +1062,12 @@ local function do_retire(op, ctx)
     end
     tx.created[#tx.created + 1] = target
     -- where the rule stood in every layout that held it: `reinstate` puts it back into each of them
-    for _, layout in ipairs(held) do
-      local new_text, why = layout_edit.remove(layout.text, op.id)
+    for _, h in ipairs(held) do
+      local new_text, why = layout_edit.remove(h.layout.text, op.id, h.form)
       if not new_text then
         return stopped(ctx, tx, tostring(why))
       end
-      local wrote, werr = write_in(tx, layout.path, new_text)
+      local wrote, werr = write_in(tx, h.layout.path, new_text)
       if not wrote then
         return stopped(ctx, tx, tostring(werr))
       end
@@ -1599,7 +1619,7 @@ door = ops_lib.make({
       run = do_retire,
     },
     reinstate = {
-      fields = fields(PLACE_FIELDS, { id = "string", places = "object" }),
+      fields = fields(PLACE_FIELDS, { id = "string", places = "object", form = "string" }),
       run = do_reinstate,
     },
     move = {

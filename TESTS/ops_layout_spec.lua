@@ -489,3 +489,67 @@ describe("rules-ops/1 layouts: new and its inverse", function()
     assert.are.equal(text, read_raw(path))
   end)
 end)
+
+describe("rules-ops/1 layouts: a rule that stands as {{brief ID}}", function()
+  local SHAPES = {
+    ["between two rules"] = { "## A", "", "{{rule DEP-01}}", "{{brief DEP-02}}", "{{rule DEP-03}}", "" },
+    ["alone between blank lines"] = { "## A", "", "{{rule DEP-01}}", "", "{{brief DEP-02}}", "", "## B", "" },
+    ["first of its section"] = { "## A", "", "{{brief DEP-02}}", "{{rule DEP-01}}", "" },
+    ["behind an introduction"] = { "## A", "", "Intro.", "", "{{brief DEP-02}}", "", "More.", "" },
+  }
+
+  it("is taken out by retire, with the form kept, and reinstate puts it back byte for byte", function()
+    for name, shape in pairs(SHAPES) do
+      local root, opts, path = fixture(shape)
+      local before = read_raw(path)
+      local retired = one(opts, { op = "retire", id = "DEP-02" })
+      local inverse = inverse_of(retired)
+      local after = read_raw(path)
+      assert.is_nil(after:find("DEP-02", 1, true), name .. ": " .. after)
+      assert.are.equal("brief", inverse.places["regeln/DEP.md"].form, name)
+      local hint = assert(read_raw(root .. "/_retired/DEP/DEP-02.md")):match("\nplace: ([^\n]*)\n")
+      assert.are.equal("brief", vim.json.decode(hint)["regeln/DEP.md"].form, name)
+      local back = one(opts, inverse)
+      assert.is_true(back.ok, name .. ": " .. vim.inspect(back))
+      assert.are.equal(before, read_raw(path), name)
+    end
+  end)
+
+  it("comes back as {{brief ID}} from the place kept in the retired file", function()
+    local _, opts, path = fixture(SHAPES["between two rules"])
+    local before = read_raw(path)
+    assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+    local entry = one(opts, { op = "reinstate", id = "DEP-02" })
+    assert.is_true(entry.ok, vim.inspect(entry))
+    assert.is_nil(entry.warnings)
+    assert.are.equal(before, read_raw(path))
+  end)
+
+  it("leaves a layout the catalog can make again (no {{brief}} of a rule that is gone)", function()
+    local root, opts = fixture(SHAPES["between two rules"])
+    assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+    local made = assert(read_raw(root .. "/regeln/DEP.md"))
+    assert.is_nil(made:find("DEP-02", 1, true), made)
+    assert.is_truthy(made:find("Text of DEP-03.", 1, true), made)
+  end)
+
+  it("refuses a form that is neither rule nor brief, and a form without a place", function()
+    local _, opts = fixture(SHAPES["between two rules"])
+    assert.is_true(one(opts, { op = "retire", id = "DEP-02" }).ok)
+    local bad = one(opts, { op = "reinstate", id = "DEP-02", layout = "regeln/DEP.md", after = "DEP-01", form = "full" })
+    assert.is_false(bad.ok)
+    assert.is_truthy(bad.error.message:find("form is rule or brief", 1, true), vim.inspect(bad))
+    local alone = one(opts, { op = "reinstate", id = "DEP-02", form = "brief" })
+    assert.is_false(alone.ok)
+    assert.is_truthy(alone.error.message:find("form needs a place", 1, true), vim.inspect(alone))
+  end)
+
+  it("is not moved: move refuses a {{rule ID}} into its layout, naming the {{brief}} line", function()
+    local _, opts, path = fixture(SHAPES["between two rules"])
+    local before = read_raw(path)
+    local entry = one(opts, { op = "move", id = "DEP-02", layout = "regeln/DEP.md", section = "A" })
+    assert.is_false(entry.ok, vim.inspect(entry))
+    assert.is_truthy(entry.error.message:find("{{brief DEP-02}} (line 8)", 1, true), vim.inspect(entry))
+    assert.are.equal(before, read_raw(path))
+  end)
+end)

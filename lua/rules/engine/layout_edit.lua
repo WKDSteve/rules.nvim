@@ -55,6 +55,13 @@ local function token_id(line)
 end
 
 ---@param line string
+---@return string|nil id  of a whole-line `{{brief ID}}`
+local function brief_id(line)
+  local bare = line:gsub("%s+$", "")
+  return bare:match("^{{brief%s+([^%s}]+)%s*}}$")
+end
+
+---@param line string
 ---@return integer|nil level
 ---@return string|nil text
 local function heading(line)
@@ -132,6 +139,7 @@ end
 ---@field heading table<integer, { [1]: integer, [2]: string }>  line -> `{ level, text }`
 ---@field token table<integer, string>  line -> rule id
 ---@field hidden table<integer, string>  line -> rule id, of a token the editor does not see (fence, comment)
+---@field brief table<integer, string>  line -> rule id, of a `{{brief ID}}` the editor sees (no anchor, no slot)
 
 ---The first line behind the frontmatter (1 when there is none).
 ---@param lines string[]
@@ -150,7 +158,7 @@ end
 ---@param lines string[]
 ---@return Rules.LayoutIndex
 local function index(lines)
-  local out = { heading = {}, token = {}, hidden = {} }
+  local out = { heading = {}, token = {}, hidden = {}, brief = {} }
   local first = body_start(lines)
   local char, len
   local comment = false
@@ -193,6 +201,8 @@ local function index(lines)
         out.heading[i] = { level, text }
       elseif id then
         out.token[i] = id
+      elseif brief_id(line) then
+        out.brief[i] = brief_id(line)
       end
     elseif id and i >= first then
       out.hidden[i] = id
@@ -214,14 +224,16 @@ local function around_of(lines, behind)
   return etag.of((lines[behind] or "") .. "\n" .. (lines[below] or ""))
 end
 
----Line index of the token of `id` the editor sees.
+---Line index of the token of `id` the editor sees: its `{{rule ID}}`, or its `{{brief ID}}` for the form `brief`.
 ---@param lines string[]
 ---@param idx Rules.LayoutIndex
 ---@param id string
+---@param form? "rule"|"brief"
 ---@return integer|nil
-local function find(lines, idx, id)
+local function find(lines, idx, id, form)
+  local tokens = form == "brief" and idx.brief or idx.token
   for i = 1, #lines do
-    if idx.token[i] == id then
+    if tokens[i] == id then
       return i
     end
   end
@@ -273,30 +285,33 @@ function M.carried_family(text, family)
   return carrier((split(text)), family, nil)
 end
 
----Why a `{{rule ID}}` of `id` may not go into a layout that carries it.
+---Why a token of `id` (`{{rule ID}}`, or `{{brief ID}}` for the form `brief`) may not go into a layout that carries it.
 ---@param held Rules.LayoutCarrier
 ---@param id string
+---@param form? "rule"|"brief"
 ---@return string
-local function carried_error(held, id)
+local function carried_error(held, id, form)
+  local put = ("{{%s %s}}"):format(form == "brief" and "brief" or "rule", id)
   if held.kind == "brief" then
-    return ("the layout has %s as %s (line %d): a {{rule %s}} would place it twice"):format(id, held.token, held.line, id)
+    return ("the layout has %s as %s (line %d): a %s would place it twice"):format(id, held.token, held.line, put)
   elseif held.kind == "refer" then
     local why = "the layout refers to the family of %s with %s (line %d): its rules are read in another document, put"
       .. " %s there"
     return why:format(id, held.token, held.line, id)
   end
-  local why = "the layout holds the family of %s with %s (line %d): the rule stands in it already, a {{rule %s}} would"
+  local why = "the layout holds the family of %s with %s (line %d): the rule stands in it already, a %s would"
     .. " place it twice"
-  return why:format(id, held.token, held.line, id)
+  return why:format(id, held.token, held.line, put)
 end
 
----Whether the layout text has a token for this rule.
+---Whether the layout text has a token for this rule: its `{{rule ID}}`, or its `{{brief ID}}` for the form `brief`.
 ---@param text string
 ---@param id string
+---@param form? "rule"|"brief"
 ---@return boolean
-function M.has(text, id)
+function M.has(text, id, form)
   local lines = split(text)
-  return find(lines, index(lines), id) ~= nil
+  return find(lines, index(lines), id, form) ~= nil
 end
 
 ---Where the token of `id` stands: the heading of its section and the id of the token above it in the same section.
@@ -335,16 +350,17 @@ local function take_out(lines, at)
   end
 end
 
----Take the token of `id` out.
+---Take the token of `id` out: its `{{rule ID}}`, or its `{{brief ID}}` for the form `brief`.
 ---@param text string
 ---@param id string
+---@param form? "rule"|"brief"
 ---@return string|nil new_text
 ---@return string|nil err
-function M.remove(text, id)
+function M.remove(text, id, form)
   local lines, eol, final = split(text)
-  local at = find(lines, index(lines), id)
+  local at = find(lines, index(lines), id, form)
   if not at then
-    return nil, ("the layout has no {{rule %s}}"):format(id)
+    return nil, ("the layout has no {{%s %s}}"):format(form == "brief" and "brief" or "rule", id)
   end
   take_out(lines, at)
   return join(lines, eol, final), nil
@@ -462,6 +478,7 @@ end
 ---@field line integer|nil  with `section`: behind the n-th line of the section, its heading being line 1
 ---@field around string|nil  with `line`: the fingerprint of the lines around that spot; a changed one is refused
 ---@field gap { above?: integer, below?: integer }|nil  the blank lines around the token, exactly
+---@field form "rule"|"brief"|nil  the token written: `{{rule ID}}` (default) or `{{brief ID}}` (what `retire` took out)
 
 ---Put the token of `id` at a place.
 ---@param text string
@@ -470,6 +487,7 @@ end
 ---@return string|nil new_text
 ---@return string|nil err
 function M.place(text, id, where)
+  local form = where.form == "brief" and "brief" or "rule"
   local lines, eol, final = split(text)
   local idx = index(lines)
   if find(lines, idx, id) then
@@ -484,7 +502,7 @@ function M.place(text, id, where)
   end
   local held = carrier(lines, parser.family_of(id), id)
   if held then
-    return nil, carried_error(held, id)
+    return nil, carried_error(held, id, form)
   end
   local slot, blank_before, blank_after
   if where.after or where.before then
@@ -510,7 +528,7 @@ function M.place(text, id, where)
   else
     return nil, "a place needs after, before, section or top"
   end
-  local put = { "{{rule " .. id .. "}}" }
+  local put = { ("{{%s %s}}"):format(form, id) }
   if where.gap then
     -- the blank lines around the slot are the ones the token stood between: they all go, and the recorded ones come
     local from, to = slot, slot
@@ -542,7 +560,7 @@ function M.place(text, id, where)
     table.insert(lines, slot + n - 1, line)
   end
   -- a slot given by a line number can lie in a fence or a comment, where the token would be text, not a rule
-  if where.line and not find(lines, index(lines), id) then
+  if where.line and not find(lines, index(lines), id, form) then
     return nil, ("line %d of the section %q is in a code block or a comment"):format(where.line, where.section)
   end
   return join(lines, eol, final), nil
@@ -555,13 +573,16 @@ end
 ---The place is the first of these that gives back the layout byte for byte once the token is out; where none does
 ---(the author put text between the token and the rule above it, say) it is the first one, with the `gap`. The place is
 ---always inside the section the token stands in. Nil when the layout does not hold the token.
+---For the form `brief` it is the place of the `{{brief ID}}` line, with `form = "brief"` (the `{{rule}}` lines around it
+---are its anchors, as for any token).
 ---@param text string
 ---@param id string
+---@param form? "rule"|"brief"
 ---@return table|nil place
-function M.where(text, id)
+function M.where(text, id, form)
   local lines = split(text)
   local idx = index(lines)
-  local at = find(lines, idx, id)
+  local at = find(lines, idx, id, form)
   if not at then
     return nil
   end
@@ -613,7 +634,7 @@ function M.where(text, id)
   while lines[at + below + 1] == "" do
     below = below + 1
   end
-  local rest = M.remove(text, id)
+  local rest = M.remove(text, id, form)
   if head then
     cands[#cands + 1] = section(false)
     -- last, for a token between two pieces of the author's text: behind the line above its blank lines, counted from
@@ -622,6 +643,11 @@ function M.where(text, id)
     behind.line = at - above - head
     behind.around = around_of((split(rest)), at - above - 1)
     cands[#cands + 1] = behind
+  end
+  if form == "brief" then
+    for _, cand in ipairs(cands) do
+      cand.form = "brief"
+    end
   end
   local gap = above <= 100 and below <= 100 and { above = above, below = below } or nil
   for _, cand in ipairs(cands) do

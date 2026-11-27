@@ -291,7 +291,7 @@ back (`reinstate`) puts the file where it was.
 
 `place` is one line of JSON: where the token stood in each layout, keyed by the layout's `output`
 (`place: {"regeln/DEP.md":{"after":"DEP-01","gap":{"above":1,"below":1}}}`; the fields are those of a place of
-`rules-ops/1`). It is a **hint**: the loader ignores it, and a `reinstate` without a place of its own takes it. When it
+`rules-ops/1`, with `"form":"brief"` where the layout had the rule as `{{brief ID}}`). It is a **hint**: the loader ignores it, and a `reinstate` without a place of its own takes it. When it
 no longer fits (the layout or the anchor rule is gone, a section was renamed) or is not read as a place, `reinstate`
 says so in a warning and brings the rule back in no layout, as for a file without the line (retired before the field
 existed). A place given to `reinstate` always wins.

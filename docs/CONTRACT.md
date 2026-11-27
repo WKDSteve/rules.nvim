@@ -216,7 +216,10 @@ token into the middle of the author's text) and `gap` (`{ "above": n, "below":
 m }`, 0 to 100 each: the blank lines that stood directly above and below the
 token, which the token is then put back between, exactly). `line` and `around`
 are optional and new; an `inverse` without them means what it meant before, and
-a `line` without `around` is put behind that line unchecked.
+a `line` without `around` is put behind that line unchecked. A place of
+`reinstate` may carry `form` (`"rule"`, the default, or `"brief"`): with
+`"brief"` the rule goes back as the `{{brief ID}}` line `retire` took out, not
+as `{{rule ID}}`.
 
 - **Where in a section.** A section is a heading up to the next heading of the
   same or a higher level. With rules in it, the token goes behind the last of
@@ -250,7 +253,10 @@ a `line` without `around` is put behind that line unchecked.
   since); `top` above every heading; `nth` where the heading
   is not the first of its text; `gap` where the way `new` puts a token in would not
   write the blank lines it had), so `reinstate` gives the layout back byte for
-  byte. Above every heading there is no `line`: a token that stands there between
+  byte. A `{{brief ID}}` line names the rule too: `retire` takes it out the same
+  way, its place carries `form: "brief"`, and `reinstate` writes it back as that
+  line. `move` moves `{{rule ID}}` lines only; a layout with a `{{brief ID}}` of
+  the rule refuses a `{{rule ID}}` of it, naming the line. Above every heading there is no `line`: a token that stands there between
   two pieces of text comes back behind the rule above it, else at the top.
 - **The divider.** A rule file ends with a blank line, `---` and a blank line;
   the generator copies the lines of a rule file as they are, so this is what
